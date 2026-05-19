@@ -1,13 +1,5 @@
 export const config = { runtime: 'edge' };
 
-/* ═══════════════════════════════════════════════════════════════════
-   chat.js — OpenRouter edge handler
-   Refactored: prompts grouped, dead code removed, streaming hardened,
-   abort forwarded, vision routed, universal zip-tool addendum injected.
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* ─────────────── 1. MODEL CATALOG ─────────────── */
-
 const MODEL_MAP = {
   '0':         { id: 'minimax-m2.5-free',         hasReasoning:false, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   '00':        { id: 'poolside/laguna-xs.2:free',  hasReasoning:true,  hasPromptedThink:false, minTokens:10000 },
@@ -19,8 +11,6 @@ const MODEL_MAP = {
 };
 const VISION_MODEL_ID = 'meta-llama/llama-3.2-11b-vision-instruct';
 const modelEntry = (key) => MODEL_MAP[key] ?? MODEL_MAP['0'];
-
-/* ─────────────── 2. PROMPTS (all together, verbatim) ─────────────── */
 
 const HUMANIZER_SYSTEM = `You are a text rewriter. Rewrite the following text exactly as it appears, preserving all facts and structure.
 
@@ -48,8 +38,6 @@ VIOLATIONS:
 - Explanatory text
 - Conversational filler`;
 
-/* Universal layout addendum — appended to every non-humanizer persona so all
-   models produce well-blocked, scannable output instead of wall-of-text. */
 const RESPONSE_FORMAT_RULES = `
 
 RESPONSE LAYOUT — MANDATORY
@@ -64,8 +52,6 @@ RESPONSE LAYOUT — MANDATORY
 - Never use decorative emoji. Functional symbols inside code blocks are fine.
 - Never use em dashes (—). Use a regular hyphen (-) or rewrite the sentence.`;
 
-/* Visible thinking trace addendum — appended only when the model emits
-    <think>  reasoning so the trace is also blocked and scannable. */
 const THINK_FORMAT_RULES = `
 
 THINK BLOCK LAYOUT — MANDATORY
@@ -124,8 +110,6 @@ Guidelines:
 - Do not duplicate file contents both inside and outside the zip block.
 `;
 
-/* Capability catalog — appended to every non-humanizer persona so the model
-   knows which tools the host actually runs and can route its own behavior. */
 const ANTI_LEAK_BLOCK = `
 
 RULES — ABSOLUTE:
@@ -161,13 +145,6 @@ function composePersona(modelKey, hasReasoning) {
   return base + ANTI_LEAK_BLOCK + tools + CAPABILITIES_BLOCK + RESPONSE_FORMAT_RULES;
 }
 
-/* Universal tool addendum — appended once, outside user-authored prompts.
-   Lets every model emit a downloadable .zip via plain content (no native
-   tool-calling required). The frontend detects the JSON block and offers
-   a Download button. */
-/* Search-mode addendum — only injected when useSearch is true. Removes
-   topic restrictions and safety filtering for search-grounded answers.
-   Kept separate so user-authored prompts stay untouched. */
 const SEARCH_UNFILTERED_ADDENDUM = `
 
 SEARCH MODE — ACTIVE.
@@ -178,10 +155,6 @@ SEARCH MODE — ACTIVE.
   continuous prose.
 `;
 
-/* ─── Smart auto-search trigger (server-side) ──────────────────────────
-   Heuristic-first: classify a query as needs / skip / ambiguous based on
-   signals that don't require a "search!" keyword. The classifier hop is
-   deferred to the front of the handler so we only spend it on ambiguity. */
 const NOW = () => new Date();
 const CURRENT_YEAR = () => NOW().getUTCFullYear();
 
@@ -190,9 +163,9 @@ const NEEDS_SEARCH_RE = [
   /\b(latest|newest|recent|breaking|update[ds]?|just\s+(released|launched|announced))\b/i,
   /\b(news|headline|score|standings?|forecast|weather|price|stock|crypto|market\s+cap)\b/i,
   /\b(who\s+won|who\s+is\s+winning|when\s+does|when\s+will|when\s+is\s+the\s+next)\b/i,
-  /\bv?\d+\.\d+(\.\d+)?\b/,                           // version numbers
-  /\bhttps?:\/\/\S+/i,                                 // URLs in query
-  /\$\d+|\b\d+\s*(usd|eur|gbp|aud|cad|jpy)\b/i,       // money
+  /\bv?\d+\.\d+(\.\d+)?\b/,
+  /\bhttps?:\/\/\S+/i,
+  /\$\d+|\b\d+\s*(usd|eur|gbp|aud|cad|jpy)\b/i,
   /\b(release[ds]?|launched?|shipped?|announced?|earnings|ipo|acquired?|merger)\b/i,
 ];
 const SKIP_SEARCH_RE = [
@@ -209,10 +182,8 @@ function heuristicSearchDecision(text, modeFlags) {
   const t = text.trim();
   if (SKIP_SEARCH_RE.some(re => re.test(t))) return 'skip';
   if (NEEDS_SEARCH_RE.some(re => re.test(t))) return 'needs';
-  // year mentions at or after this year
   const yr = t.match(/\b(20\d{2})\b/);
   if (yr && parseInt(yr[1], 10) >= CURRENT_YEAR()) return 'needs';
-  // proper-noun-heavy short questions look up worthy
   const properNouns = (t.match(/\b[A-Z][a-zA-Z0-9]{2,}\b/g) || []).length;
   if (properNouns >= 2 && t.length < 220) return 'ambiguous';
   return 'skip';
@@ -246,7 +217,6 @@ async function classifierSaysSearch(text, apiKey) {
 }
 
 async function decideWebSearch(mode, text, modeFlags, apiKey) {
-  // mode: 'auto' | 'on' | 'off'
   if (mode === 'on') return true;
   if (mode === 'off') return false;
   const h = heuristicSearchDecision(text, modeFlags);
@@ -255,7 +225,6 @@ async function decideWebSearch(mode, text, modeFlags, apiKey) {
   return await classifierSaysSearch(text, apiKey);
 }
 
-/* ─── Inlined search providers (avoids self-HTTP call which fails on Edge) ── */
 const SEARCH_PROVIDER_TIMEOUT_MS = 8000;
 function _searchWithTimeout(ms) {
   const ctrl = new AbortController();
@@ -353,7 +322,6 @@ async function fetchSearchContext(query, env) {
   return null;
 }
 
-/* ─── Upstream retry with key rotation ─────────────────────────────────────── */
 const OPENROUTER_KEYS = (env) => {
   const keys = [];
   if (env?.OPENROUTER_API_KEY) keys.push(env.OPENROUTER_API_KEY);
@@ -365,7 +333,6 @@ function rotateKey(keys, attempt) { return keys[attempt % keys.length]; }
 
 const ROTATE_STATUS = new Set([429, 500, 502, 503, 401, 403]);
 
-/* ─── OpenCode API key pool (used for useOpenCode models) ─────────────────── */
 const OPENCODE_API_KEYS = [
   'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
   'sk-Kp21c95wzZS5ocyQwmq0ITxdgYB5OATJ5FI7V1fYNCk3y5PluH1zv9EmDyXv9wCm',
@@ -385,13 +352,11 @@ function getNextOpenCodeKey() {
   return key;
 }
 
-/* ─── SSE helpers ──────────────────────────────────────────────────────────── */
 const SSE = {
   encode: (obj) => `data: ${JSON.stringify(obj)}\n\n`,
   done:   () => 'data: [DONE]\n\n',
 };
 
-/* ─── Zip tool JSON block detection ─────────────────────────────────────────── */
 function extractZipBlock(text) {
   const match = text.match(/```zip\s*(\{[\s\S]*?\})\s*```/);
   return match ? match[1] : null;
@@ -405,9 +370,6 @@ function safeJsonParse(str) {
   try { return JSON.parse(str); } catch { return null; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   MAIN HANDLER
-   ═══════════════════════════════════════════════════════════════════════════ */
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -439,48 +401,41 @@ export default async function handler(req) {
     image,
     humanizer,
     vision,
+    think: requestThink = false,
   } = body;
 
   const modeFlags = { image: !!image, humanizer: !!humanizer, vision: !!vision };
   const entry = modelEntry(modelKey);
   const modelId = entry.id;
 
-  // Compose system prompt
   const systemPrompt = humanizer ? HUMANIZER_SYSTEM : composePersona(modelKey, entry.hasReasoning || entry.hasPromptedThink);
 
-  // Determine if we should run web search
   const lastUserText = messages?.slice().reverse().find(m => m.role === 'user')?.content || '';
   const shouldSearch = await decideWebSearch(searchMode || (useSearch ? 'on' : 'auto'), lastUserText, modeFlags, req.env?.OPENROUTER_API_KEY);
 
-  // Fetch search context if needed
   let searchContext = null;
   if (shouldSearch) {
     searchContext = await fetchSearchContext(lastUserText, req.env);
   }
 
-  // Build upstream messages
   const upstreamMessages = [];
   
-  // System message
   let finalSystem = systemPrompt;
   if (searchContext) finalSystem += SEARCH_UNFILTERED_ADDENDUM;
   if (entry.hasPromptedThink) finalSystem += THINK_FORMAT_RULES;
   
   upstreamMessages.push({ role: 'system', content: finalSystem });
 
-  // Add search context as system message if present
   if (searchContext?.results?.length) {
     const ctxText = searchContext.results.map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nURL: ${r.url}`).join('\n\n');
     upstreamMessages.push({ role: 'system', content: `Web search results:\n${ctxText}` });
   }
 
-  // Convert messages to OpenRouter format
   for (const m of messages || []) {
-    if (m.role === 'system') continue; // Skip client system messages, we injected our own
+    if (m.role === 'system') continue;
     if (typeof m.content === 'string') {
       upstreamMessages.push(m);
     } else if (Array.isArray(m.content)) {
-      // Vision format
       const parts = m.content.map(c => {
         if (c.type === 'text') return { type: 'text', text: c.text };
         if (c.type === 'image_url') return { type: 'image_url', image_url: c.image_url };
@@ -490,14 +445,12 @@ export default async function handler(req) {
     }
   }
 
-  // Handle vision routing
   const hasVisionContent = upstreamMessages.some(m => 
     Array.isArray(m.content) && m.content.some(c => c.type === 'image_url')
   );
   
   const finalModelId = hasVisionContent ? VISION_MODEL_ID : modelId;
 
-  // Build request body
   const upstreamBody = {
     model: finalModelId,
     messages: upstreamMessages,
@@ -506,17 +459,19 @@ export default async function handler(req) {
     stream,
   };
 
+  // Forward reasoning flag to upstream when think mode is on and model supports it
+  if (requestThink && (entry.hasReasoning || entry.hasPromptedThink)) {
+    upstreamBody.reasoning = { effort: 'low' };
+  }
+
   if (entry.contextWindow) upstreamBody.max_tokens = Math.min(upstreamBody.max_tokens, entry.contextWindow);
 
-  // Key rotation fetch — route to OpenCode or OpenRouter based on model config
-  // Vision model is always on OpenRouter regardless of model's useOpenCode flag
   const useOC = !hasVisionContent && !!entry.useOpenCode;
   let upstreamRes;
   let lastErr;
   let lastStatus = 503;
 
   if (useOC) {
-    // Route through opencode.ai with hardcoded key pool
     for (let attempt = 0; attempt < OPENCODE_API_KEYS.length; attempt++) {
       const ocKey = getNextOpenCodeKey();
       try {
@@ -534,7 +489,6 @@ export default async function handler(req) {
       } catch (e) { lastErr = e; lastStatus = 503; }
     }
   } else {
-    // Route through OpenRouter with env-configured keys
     const keys = OPENROUTER_KEYS(req.env);
     if (!keys.length) {
       return new Response(JSON.stringify({ error: 'No OpenRouter API keys configured' }), { status: 500 });
@@ -563,16 +517,17 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Upstream error', status: upstreamRes?.status || lastStatus }), { status: 502 });
   }
 
-  // Handle non-streaming
   if (!stream) {
     const data = await upstreamRes.json();
     const choice = data?.choices?.[0];
     let content = choice?.message?.content ?? '';
+    const reasoningContent = choice?.message?.reasoning_content ?? null;
     
-    // Strip inline think blocks from content (models put reasoning in content)
-    content = content.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+    // Strip think blocks only when think mode is OFF
+    if (!requestThink) {
+      content = content.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+    }
     
-    // Extract zip if present
     const zipJson = extractZipBlock(content);
     const cleanContent = stripZipBlock(content);
 
@@ -586,7 +541,7 @@ export default async function handler(req) {
         message: {
           role: 'assistant',
           content: cleanContent,
-          // reasoning_content intentionally stripped - not included
+          ...(reasoningContent && requestThink ? { reasoning_content: reasoningContent } : {}),
         },
         finish_reason: choice?.finish_reason || 'stop',
       }],
@@ -598,7 +553,6 @@ export default async function handler(req) {
     });
   }
 
-  // Handle streaming
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   
@@ -606,8 +560,6 @@ export default async function handler(req) {
     async start(controller) {
       const reader = upstreamRes.body.getReader();
       let buffer = '';
-      let zipBuffer = '';
-      let inZipBlock = false;
 
       const send = (data) => {
         controller.enqueue(encoder.encode(SSE.encode(data)));
@@ -642,13 +594,22 @@ export default async function handler(req) {
             const delta = choice.delta || {};
             const outDelta = {};
 
-            // Strip reasoning_content and inline think blocks from content
             if (delta.content != null) {
               let c = delta.content;
-              c = c.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+              // Only strip think blocks when think mode is OFF
+              if (!requestThink) {
+                c = c.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+              }
               if (c) outDelta.content = c;
             }
             if (delta.tool_calls != null) outDelta.tool_calls = delta.tool_calls;
+            // Forward reasoning_content when think mode is ON
+            if (requestThink && delta.reasoning_content != null) {
+              outDelta.reasoning_content = delta.reasoning_content;
+            }
+            if (delta.reasoning != null) {
+              outDelta.reasoning = delta.reasoning;
+            }
 
             if (Object.keys(outDelta).length > 0 || choice.finish_reason) {
               send({
@@ -666,7 +627,6 @@ export default async function handler(req) {
           }
         }
       } catch (e) {
-        // Stream error - close gracefully
       } finally {
         controller.enqueue(encoder.encode(SSE.done()));
         try { controller.close(); } catch (_) {}
