@@ -65,16 +65,16 @@ const REASONING_EFFORT_LEVELS = ['default', 'low', 'medium', 'high', 'extrahigh'
 
 function upstreamErrorToVoid(status) {
   switch (status) {
-    case 400: return 'Bad request — check your messages and parameters';
-    case 401: return 'Authentication failed — verify your API key';
-    case 403: return 'Access denied — your key does not have permission';
+    case 400: return 'Bad request check your messages and parameters';
+    case 401: return 'Authentication failed verify your API key';
+    case 403: return 'Access denied your key does not have permission';
     case 404: return 'Model not found';
-    case 429: return 'Rate limit reached — please slow down your requests';
+    case 429: return 'Rate limit reached please slow down your requests';
     case 500: return 'The model encountered an internal error';
-    case 502: return 'Model gateway error — try again shortly';
+    case 502: return 'Model gateway error try again shortly';
     case 503: return 'Model is temporarily unavailable — try again later';
-    case 504: return 'Request timed out — try a shorter prompt or retry';
-    default:  return `Request failed (${status}) — try again later`;
+    case 504: return 'Request timed out try a shorter prompt or retry';
+    default:  return `Request failed (${status}) try again later`;
   }
 }
 
