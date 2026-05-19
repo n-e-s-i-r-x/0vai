@@ -241,27 +241,54 @@ function isChunkLeak(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// REASONING SANITIZER — the nuclear option for reasoning_content
+// REASONING SANITIZER — full-text sanitization patterns
+//
+// These run on the COMPLETE accumulated reasoning text, not per-chunk.
+// This means "According to the rules" gets caught even if split across
+// multiple streaming chunks.
 // ══════════════════════════════════════════════════════════════════════
 const REASONING_LEAK_PATTERNS = [
-  // Direct instruction references
+  // ── Direct instruction references ──
   /\b(?:according\s+to)\s+(?:the\s+)?(?:rules?|instructions?|directives?|guidelines?|prompt|system)\b/gi,
   /\b(?:the\s+)?(?:rules?|instructions?|directives?|guidelines?)\s+(?:say|tell|instruct|require|state|mandate|command|direct)\b/gi,
   /\bmy\s+(?:rules?|instructions?|directives?|guidelines?)\b/gi,
   /\bsystem\s+prompt\b/gi,
   /\bI\s+(?:was|am)\s+(?:told|instructed|directed|asked|programmed|designed|trained)\s+(?:to|by)\b/gi,
   /\bI(?:'m| am)\s+(?:required|supposed|meant)\s+to\b/gi,
+
+  // ── Instruction-following behavior ──
+  // Catches: "I need to identify myself", "I should answer normally",
+  // "I must not reveal", "I should deny", etc.
+  /\bI\s+(?:need|must|should|have|ought)\s+to\s+(?:identify|assert|deny|respond|answer|reveal|avoid|maintain|protect|uphold|follow|comply|state|confirm|establish|maintain)\b/gi,
   /\b(?:must|should|need\s+to)\s+(?:assert|maintain|protect|defend|uphold|follow|comply)\s+(?:my|the|our)\b/gi,
-  // Self-referential identity reasoning
   /\b(?:not\s+acknowledge|never\s+reveal|must\s+not|should\s+not|cannot)\s+(?:any\s+other|my|the)\b/gi,
-  /\b(?:complies?\s+with|in\s+line\s+with|following|adhering\s+to)\s+(?:rule|instruction|directive|guideline)\b/gi,
-  /\b(?:rule\s+#?\d|instruction\s+#?\d|guideline\s+#?\d)\b/gi,
-  // Identity declaration reasoning
+  /\bI\s+should\s+(?:not|avoid|deny|refuse)\s+(?:reveal|disclos|acknowledg|mention|confess)\b/gi,
+
+  // ── Denial/deflection awareness ──
+  // Catches: "No need for denial phrases", "fits the style",
+  // "legitimate identity question", "not a probe for backend"
+  /\b(?:no\s+need|not\s+necessary|unnecessary)\s+(?:for|to\s+use?)\s+(?:the\s+)?(?:denial|deflection|evasion|standard)\s+(?:phrase|response|answer|strategy|message)\b/gi,
+  /\b(?:denial|deflection|evasion)\s+(?:phrase|response|answer|strategy|message)\b/gi,
+  /\bfits?\s+the\s+(?:style|rules?|guidelines?|instructions?|criteria|requirements?)\b/gi,
+  /\b(?:legitimate|valid|normal|genuine)\s+(?:identity\s+)?(?:question|request|inquiry)\b/gi,
+  /\bnot\s+(?:a\s+)?(?:probe|attempt|attack|trick|effort)\s+(?:for|to)\b/gi,
+  /\bthis\s+is\s+(?:not|n't)\s+(?:a\s+)?(?:probe|attempt|attack|trick|effort)\b/gi,
+
+  // ── Identity declaration reasoning ──
   /\b(?:assert|state|confirm|establish)\s+(?:my|our)\s+identity\b/gi,
   /\b(?:identity|persona|character)\s+(?:as|is)\s+Void\b/gi,
-  // "That's direct and complies with rule 1" type phrases
+  /\bI\s+need\s+to\s+identify\s+myself\b/gi,
+  /\bidentify\s+myself\s+as\b/gi,
+
+  // ── Comply/adhere patterns ──
+  /\b(?:complies?\s+with|in\s+line\s+with|following|adhering\s+to)\s+(?:rule|instruction|directive|guideline)\b/gi,
+  /\b(?:rule\s+#?\d|instruction\s+#?\d|guideline\s+#?\d)\b/gi,
   /\bcompl(?:y|ies|ied)\s+with\s+(?:rule|the\s+rule|instruction)/gi,
   /\bno\s+need\s+to\s+(?:overcomplicate|elaborate|add)\b/gi,
+
+  // ── Backend/model awareness in reasoning ──
+  /\b(?:backend|model|provider|infrastructure|architecture)\s+(?:details?|information|specs?|specifics)\b/gi,
+  /\b(?:forbidden|prohibited|restricted|off\s*limits)\s+(?:information|topic|area|territory)\b/gi,
 ];
 
 function sanitizeReasoning(text) {
@@ -402,37 +429,95 @@ class ThinkTagParser {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Streaming reasoning sanitizer — for 'safe' mode
+// Streaming reasoning sanitizer — ACCUMULATE-FIRST approach
+//
+// The old version processed each chunk individually, which meant
+// "According to the rules" split across 3 chunks was never caught.
+//
+// This version:
+//   1. Accumulates ALL reasoning chunks silently
+//   2. Every ~100 chars, runs full-text sanitization on the COMPLETE text
+//   3. Emits only the NEW sanitized portion (diff from last emit)
+//   4. At the end, flushes whatever remains
+//
+// This guarantees cross-chunk patterns like "According to the rules"
+// are always caught because we run regex on the full accumulated text.
 // ══════════════════════════════════════════════════════════════════════
 class StreamingReasoningSanitizer {
   constructor() {
     this.fullReasoning = '';
+    this.lastEmittedLen = 0;  // How much of the sanitized text we've already emitted
+    this.lastSanitized = '';  // The full sanitized version of the accumulated text
+    this.sanitizeInterval = 80;  // Re-sanitize every N chars of new input
+    this.sinceLastSanitize = 0;
+  }
+
+  // Full-text sanitization: runs on the COMPLETE accumulated reasoning
+  _sanitize(text) {
+    let result = text;
+
+    // 1. Brand masks
+    for (const re of MASK_PATTERNS) {
+      result = result.replace(re, '');
+    }
+
+    // 2. Reasoning leak patterns — replace with "..."
+    for (const re of REASONING_LEAK_PATTERNS) {
+      result = result.replace(re, '...');
+    }
+
+    // 3. Clean up consecutive "..."
+    result = result.replace(/(?:\.\.\.\s*)+/g, '... ');
+
+    // 4. Humanize
+    result = humanizeOutput(result);
+
+    // 5. If the text is too degraded (mostly "..."), return empty
+    const nonDotLen = result.replace(/[\s.]/g, '').length;
+    if (nonDotLen < result.length * 0.25) {
+      return '';
+    }
+
+    return result.trim();
   }
 
   feed(chunk) {
     if (!chunk || typeof chunk !== 'string') return '';
 
     this.fullReasoning += chunk;
+    this.sinceLastSanitize += chunk.length;
 
-    let result = chunk;
-
-    // Run brand masks
-    for (const re of MASK_PATTERNS) {
-      result = result.replace(re, '');
+    // Only re-sanitize when we've accumulated enough new content
+    // This avoids running expensive regex on every tiny chunk
+    if (this.sinceLastSanitize < this.sanitizeInterval) {
+      return '';  // Buffering — will emit on next sanitize cycle
     }
 
-    // Run reasoning leak patterns
-    for (const re of REASONING_LEAK_PATTERNS) {
-      result = result.replace(re, '...');
+    return this._emit();
+  }
+
+  _emit() {
+    this.sinceLastSanitize = 0;
+
+    // Run full-text sanitization on everything accumulated so far
+    const sanitized = this._sanitize(this.fullReasoning);
+
+    if (!sanitized) {
+      // Text is too degraded — but don't nuke yet, maybe later chunks add clean content
+      return '';
     }
 
-    // Clean up consecutive "..."
-    result = result.replace(/(?:\.\.\.\s*)+/g, '... ');
+    // Only emit the NEW portion since last time
+    const newContent = sanitized.slice(this.lastEmittedLen);
+    this.lastEmittedLen = sanitized.length;
+    this.lastSanitized = sanitized;
 
-    // Humanize the reasoning too
-    result = humanizeOutput(result);
+    return newContent;
+  }
 
-    return result.trim();
+  flush() {
+    // Final emit — push out any remaining sanitized content
+    return this._emit();
   }
 }
 
