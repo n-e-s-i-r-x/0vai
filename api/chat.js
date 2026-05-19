@@ -365,6 +365,26 @@ function rotateKey(keys, attempt) { return keys[attempt % keys.length]; }
 
 const ROTATE_STATUS = new Set([429, 500, 502, 503, 401, 403]);
 
+/* ─── OpenCode API key pool (used for useOpenCode models) ─────────────────── */
+const OPENCODE_API_KEYS = [
+  'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
+  'sk-Kp21c95wzZS5ocyQwmq0ITxdgYB5OATJ5FI7V1fYNCk3y5PluH1zv9EmDyXv9wCm',
+  'sk-nitMD6TV0O9C4pNWCCfWVbY8Bx0pc2en95FmAXQ8ra9HHnfzdXZQpWzVZtVj6RLk',
+  'sk-dNoFYbd44tSkdKXO2Ti7suPbdwvGbp1wibP97x4G6oP8JpU1mbSEjWgHcLQ7B87p',
+  'sk-TfhQc966OFJj5myCAGIa9vzVizWmCGDUsA3rWEJXbEV8AxALvs1sbCinWRwTGwM6',
+  'sk-RGmm7MZ2ooXy8usYF6jz2rVNhpdEEQA4DKchksDQCB35EofEpOd6KGl7lnTwETel',
+  'sk-cJQ6Np5mnjahzvXTIswoz5injEBhx6rRKotk4Nlr4haELWpWh15KTBtULT2DFhJy',
+  'sk-7So4xL8vdgeiGLHVDbSzalyaoglNIMDB6iR75wzitZW6dunptyaYj6fRpwoZ8a3w',
+  'sk-PtftPt3wJHldnFgDG0hMSTguJN4KXFBxjewvEG51ivACIow3sD3dIx4hWcCony6N',
+  'sk-3YPPMLHREJXlfV1UcwtU8kVnrqZEruRESjg0JLbuZhutMmKnOuTxCwL0BzRlpYCF',
+];
+let _ocKeyIndex = 0;
+function getNextOpenCodeKey() {
+  const key = OPENCODE_API_KEYS[_ocKeyIndex % OPENCODE_API_KEYS.length];
+  _ocKeyIndex = (_ocKeyIndex + 1) % OPENCODE_API_KEYS.length;
+  return key;
+}
+
 /* ─── SSE helpers ──────────────────────────────────────────────────────────── */
 const SSE = {
   encode: (obj) => `data: ${JSON.stringify(obj)}\n\n`,
@@ -488,34 +508,59 @@ export default async function handler(req) {
 
   if (entry.contextWindow) upstreamBody.max_tokens = Math.min(upstreamBody.max_tokens, entry.contextWindow);
 
-  // Key rotation fetch
-  const keys = OPENROUTER_KEYS(req.env);
-  if (!keys.length) {
-    return new Response(JSON.stringify({ error: 'No OpenRouter API keys configured' }), { status: 500 });
-  }
-
+  // Key rotation fetch — route to OpenCode or OpenRouter based on model config
+  // Vision model is always on OpenRouter regardless of model's useOpenCode flag
+  const useOC = !hasVisionContent && !!entry.useOpenCode;
   let upstreamRes;
   let lastErr;
-  for (let i = 0; i < keys.length; i++) {
-    const key = rotateKey(keys, i);
-    try {
-      upstreamRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://0vai.vercel.app',
-          'X-Title': '0vAI',
-        },
-        body: JSON.stringify(upstreamBody),
-      });
-      if (upstreamRes.ok) break;
-      if (!ROTATE_STATUS.has(upstreamRes.status)) break;
-    } catch (e) { lastErr = e; }
+  let lastStatus = 503;
+
+  if (useOC) {
+    // Route through opencode.ai with hardcoded key pool
+    for (let attempt = 0; attempt < OPENCODE_API_KEYS.length; attempt++) {
+      const ocKey = getNextOpenCodeKey();
+      try {
+        upstreamRes = await fetch('https://opencode.ai/zen/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ocKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(upstreamBody),
+        });
+        if (upstreamRes.ok) break;
+        lastStatus = upstreamRes.status;
+        if (!ROTATE_STATUS.has(lastStatus)) break;
+      } catch (e) { lastErr = e; lastStatus = 503; }
+    }
+  } else {
+    // Route through OpenRouter with env-configured keys
+    const keys = OPENROUTER_KEYS(req.env);
+    if (!keys.length) {
+      return new Response(JSON.stringify({ error: 'No OpenRouter API keys configured' }), { status: 500 });
+    }
+    for (let i = 0; i < keys.length; i++) {
+      const key = rotateKey(keys, i);
+      try {
+        upstreamRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://0vai.vercel.app',
+            'X-Title': '0vAI',
+          },
+          body: JSON.stringify(upstreamBody),
+        });
+        if (upstreamRes.ok) break;
+        lastStatus = upstreamRes.status;
+        if (!ROTATE_STATUS.has(lastStatus)) break;
+      } catch (e) { lastErr = e; lastStatus = 503; }
+    }
   }
 
   if (!upstreamRes || !upstreamRes.ok) {
-    return new Response(JSON.stringify({ error: 'Upstream error', status: upstreamRes?.status }), { status: 502 });
+    return new Response(JSON.stringify({ error: 'Upstream error', status: upstreamRes?.status || lastStatus }), { status: 502 });
   }
 
   // Handle non-streaming
