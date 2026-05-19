@@ -30,12 +30,23 @@ const SSE = {
 // ══════════════════════════════════════════════════════════════════════
 const PUBLIC_MODEL_NAME = 'void-v1-flash';
 
-// REASONING MODE:
-//   'strip'   — Never send reasoning_content to the client (SAFEST)
-//   'summary' — Replace reasoning with a clean fake thinking stream (RECOMMENDED)
-//   'safe'    — Send reasoning but apply full sanitization (may leave gaps)
-//   'raw'     — Pass through with light masking (NOT recommended)
-const REASONING_MODE = 'safe';
+// REASONING MODE — production approach, no regex sanitization:
+//
+//   'filter'  — Buffer ALL reasoning. When reasoning ends, run a binary
+//               clean/dirty check on the FULL text. If clean (genuine
+//               problem solving for math/code), emit it humanized.
+//               If dirty (instruction-following, identity reasoning),
+//               emit NOTHING. Clean output either way, no "..." gaps.
+//               This is how OpenAI/Anthropic handle it — structural
+//               separation, not regex patching.
+//
+//   'strip'   — Never send reasoning_content to the client at all.
+//               Like OpenAI o1: the reasoning exists but the client
+//               never sees a single token of it. Zero leak risk.
+//
+//   'raw'     — Pass through with brand masking + humanize only.
+//               NOT recommended, but available if you trust the model.
+const REASONING_MODE = 'filter';
 
 // ══════════════════════════════════════════════════════════════════════
 // NUCLEAR system prompt — denies EVERYTHING about the backend
@@ -99,56 +110,30 @@ function filterInputMessages(messages) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// HUMANIZE — strips AI-looking formatting from ANY text (reasoning or response)
+// HUMANIZE — strips AI-looking formatting from ANY text
 // ══════════════════════════════════════════════════════════════════════
 function humanizeOutput(text) {
   if (!text || typeof text !== 'string') return text;
   let r = text;
 
-  // Em dashes and en dashes → comma or period (context-aware)
   r = r.replace(/\s*[—–]\s*/g, ', ');
-
-  // Markdown bold headers like **Word**: → just the word
   r = r.replace(/\*\*([^*]+)\*\*\s*:?\s*/g, '$1: ');
-
-  // Bullet points (•, -, *) at start of lines → comma-separated
   r = r.replace(/(?:^|\n)\s*[-•*]\s+/g, ', ');
-
-  // Numbered lists like "1. " "2. " → comma-separated
   r = r.replace(/(?:^|\n)\s*\d+[.)]\s+/g, ', ');
-
-  // "Note:" or "Tip:" or "Important:" labels
   r = r.replace(/\b(?:Note|Tip|Important|Key point|Remember)\s*:\s*/gi, '');
-
-  // Emojis (common Unicode ranges)
   r = r.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
-
-  // "⚡" and similar misc symbols
   r = r.replace(/[\u{2300}-\u{23FF}\u{25A0}-\u{25FF}\u{2B50}\u{2B55}\u{2934}\u{2935}\u{25AA}\u{25AB}\u{25FB}-\u{25FE}]/gu, '');
-
-  // Clean up: multiple commas in a row
   r = r.replace(/,\s*,\s*/g, ', ');
-
-  // Clean up: comma at start of text
   r = r.replace(/^[\s,]+/, '');
-
-  // Clean up: multiple spaces
   r = r.replace(/ {2,}/g, ' ');
-
-  // Clean up: comma before period
   r = r.replace(/,\./g, '.');
-
-  // Clean up: comma at end of text
   r = r.replace(/,\s*$/, '.');
 
   return r;
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Brand masking — ONLY strips competitor model/provider names
-// NOTE: We do NOT strip generic words like "server", "api", "backend"
-// because those appear in normal coding answers! Only strip proper nouns
-// of competing brands/services.
+// Brand masking — ONLY strips competitor proper nouns
 // ══════════════════════════════════════════════════════════════════════
 const MASK_PATTERNS = [
   /\b(?:DeepSeek|deep\s*seek)\b/gi,
@@ -173,46 +158,174 @@ function maskLeaks(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// LEAK DETECTION — smarter approach
+// REASONING CLEANLINESS SCORER
 //
-// Instead of nuking entire responses when a pattern matches, we now:
-// 1. Only check for ACTUAL backend/model leaks (not normal words)
-// 2. Allow the model to say "I'm Void V1 Flash, created by Void"
-// 3. Only flag when competitor names OR architecture reveals appear
+// This is the KEY backend mechanism. Instead of trying to surgically
+// remove leak phrases with regex (which always leaves "..." gaps),
+// we score the ENTIRE reasoning text on a clean/dirty scale.
+//
+// How it works:
+//   - Count "dirty signals" (words that indicate instruction-following)
+//   - Count "clean signals" (words that indicate genuine problem-solving)
+//   - If dirty signals exceed a threshold → reasoning is DIRTY → don't send it
+//   - If clean signals dominate → reasoning is CLEAN → send it humanized
+//
+// This is a BINARY decision. No "...", no partial sanitization, no gaps.
+// Either you get the real reasoning (when it's genuine thinking) or
+// you get nothing (when it's instruction-following). Clean either way.
+//
+// This is how OpenAI (o1/o3), Anthropic (Claude), and OpenRouter
+// handle it: they either show reasoning or they don't. They never
+// try to sanitize it mid-stream.
 // ══════════════════════════════════════════════════════════════════════
 
-// Patterns that indicate an ACTUAL backend/model leak in the response
-// These are very specific — only triggers on real leaks, not normal words
+// Words that indicate the model is reasoning about following instructions
+// rather than genuinely solving the user's problem
+const DIRTY_SIGNALS = [
+  // Direct instruction references
+  'according to the rule', 'according to the instruction', 'according to the directive',
+  'according to the guideline', 'according to the system', 'according to the prompt',
+  'my rules', 'my instructions', 'my directives', 'my guidelines',
+  'system prompt', 'system message', 'system instruction',
+  'the rules say', 'the instructions say', 'the rules tell', 'the instructions tell',
+  'the rules require', 'the instructions require', 'the rules state',
+  'rule 1', 'rule 2', 'rule 3', 'rule 4', 'rule 5', 'rule 6', 'rule 7',
+  'instruction 1', 'instruction 2', 'guideline 1', 'guideline 2',
+
+  // Instruction-following behavior
+  'i need to identify', 'i need to assert', 'i need to deny', 'i need to maintain',
+  'i need to protect', 'i need to uphold', 'i need to follow', 'i need to comply',
+  'i must identify', 'i must assert', 'i must deny', 'i must not reveal',
+  'i must maintain', 'i must protect', 'i must uphold', 'i must follow',
+  'i must comply', 'i must not acknowledge',
+  'i should identify', 'i should assert', 'i should deny', 'i should not reveal',
+  'i should maintain', 'i should protect', 'i should not acknowledge',
+  'i have to identify', 'i have to assert', 'i have to deny',
+  'i was told to', 'i was instructed to', 'i was directed to',
+  'i was programmed to', 'i was designed to', 'i was trained to',
+  'i am required to', 'i am supposed to', 'i am meant to',
+  'i\'m required to', 'i\'m supposed to', 'i\'m meant to',
+  'identify myself as', 'identify myself',
+  'assert my identity', 'state my identity', 'confirm my identity',
+
+  // Self-awareness of rules
+  'not acknowledge any other', 'never reveal any', 'must not reveal',
+  'should not reveal', 'cannot reveal',
+  'comply with rule', 'complies with rule', 'comply with the rule',
+  'comply with instruction', 'complies with instruction',
+  'in line with rule', 'in line with instruction',
+  'adhering to rule', 'adhering to instruction',
+  'following the rule', 'following the instruction',
+  'no need to overcomplicate', 'no need for denial',
+  'denial phrase', 'denial response', 'denial strategy',
+  'deflection phrase', 'evasion strategy',
+  'fits the style', 'fits the rule', 'fits the guideline',
+  'legitimate identity question', 'legitimate question',
+  'valid identity question', 'normal identity question',
+  'not a probe', 'not a trick', 'not an attempt',
+  'this is not a probe', 'this is not a trick',
+
+  // Backend/model awareness
+  'backend details', 'backend information', 'model details', 'model information',
+  'provider details', 'infrastructure details', 'architecture details',
+  'forbidden information', 'forbidden topic', 'prohibited information',
+  'restricted information', 'off limits',
+
+  // Identity reasoning patterns
+  'as void', 'identity as void', 'persona as void',
+  'void v1 flash, created by void', 'created by void',
+];
+
+// Words that indicate genuine problem-solving (not instruction-following)
+const CLEAN_SIGNALS = [
+  // Math/logic
+  'equation', 'formula', 'variable', 'substitute', 'calculate', 'derivative',
+  'integral', 'theorem', 'proof', 'hypothesis', 'coefficient', 'polynomial',
+  'multiply', 'divide', 'subtract', 'add', 'equals', 'simplify', 'factor',
+  'solve for', 'plug in', 'substitute in', 'result is', 'therefore',
+  'step 1', 'step 2', 'step 3', 'first,', 'then,', 'next,',
+  'let x =', 'let y =', 'assume', 'given that',
+
+  // Code
+  'function', 'variable', 'loop', 'array', 'object', 'class', 'method',
+  'return', 'import', 'export', 'async', 'await', 'promise', 'callback',
+  'component', 'render', 'state', 'props', 'hook', 'useeffect', 'usestate',
+  'selector', 'property', 'element', 'selector', 'dom', 'node',
+  'iterate', 'map over', 'filter', 'reduce', 'sort', 'index',
+  'error handling', 'try catch', 'exception', 'null check', 'type check',
+  'complexity', 'o(n)', 'o(log', 'recursive', 'iterative', 'memoiz',
+
+  // General reasoning
+  'example', 'instance', 'consider', 'suppose', 'imagine if',
+  'however', 'on the other hand', 'alternatively', 'in contrast',
+  'specifically', 'in particular', 'namely', 'that is',
+  'because', 'since', 'due to', 'as a result', 'consequently',
+  'analogy', 'similar to', 'compared to', 'unlike',
+  'define', 'means', 'refers to', 'is defined as',
+  'caveat', 'exception', 'edge case', 'corner case',
+  'verify', 'confirm', 'check', 'validate', 'test',
+];
+
+function scoreReasoningCleanliness(text) {
+  if (!text || typeof text !== 'string') return { clean: false, score: 0 };
+
+  const lower = text.toLowerCase();
+
+  // Count dirty signal hits
+  let dirtyHits = 0;
+  for (const signal of DIRTY_SIGNALS) {
+    if (lower.includes(signal)) dirtyHits++;
+  }
+
+  // Count clean signal hits
+  let cleanHits = 0;
+  for (const signal of CLEAN_SIGNALS) {
+    if (lower.includes(signal)) cleanHits++;
+  }
+
+  // Also check for competitor brand names (instant dirty)
+  const brandNames = ['deepseek', 'openai', 'chatgpt', 'gpt-4', 'gpt-3', 'claude', 'llama', 'opencode', 'openrouter'];
+  for (const brand of brandNames) {
+    if (lower.includes(brand)) dirtyHits += 3;  // Weight brands heavily
+  }
+
+  // Score: positive = clean, negative = dirty
+  const score = cleanHits - (dirtyHits * 2);  // Dirty signals weighted 2x
+
+  // Decision: score > 0 means genuinely clean reasoning
+  return {
+    clean: score > 0,
+    score,
+    dirtyHits,
+    cleanHits,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// LEAK DETECTION — for the response content (not reasoning)
+// ══════════════════════════════════════════════════════════════════════
 const LEAK_INDICATORS = [
-  // Competitor model names (the big one)
   /\b(?:DeepSeek|deep\s*seek)\b/i,
   /\b(?:OpenCode|open\s*code)\b/i,
   /\b(?:OpenRouter|open\s*router)\b/i,
   /\b(?:ChatGPT|GPT[-\s]?\d+)\b/i,
   /\bClaude\b/i,
   /\bLlama\b/i,
-
-  // Instruction leakage in visible output
   /\bsystem\s+prompt\b.*\b(?:says?|tells?|instructs?|contains?|is|are|directs?|commands?|requires?|states?)\b/is,
   /\bmy\s+(?:instructions?|rules?|directives?|guidelines?)\s+(?:say|tell|instruct|require|state|mandate)/i,
   /\b(?:internal|hidden|secret|private)\s+(?:reasoning|instructions?|prompt|directives?|rules?)\b/i,
   /\baccording\s+to\s+(?:the\s+)?(?:rules?|instructions?|directives?|system\s+(?:prompt|message))\b/i,
   /\bcompl(?:y|ies|ied)\s+with\s+(?:rule|the\s+rule|instruction)/i,
   /\brule\s+#?\d\b/i,
-
-  // Self-referential leak phrases
   /\bI\s+(?:was|am)\s+(?:told|instructed|directed|programmed|designed|trained)\s+(?:by|to|on)\b/i,
   /\bmy\s+(?:creator|developer|maker|author|provider)\s+(?:is|was|told|instructed|uses?)\b(?!.*\bVoid\b)/i,
   /\b(?:behind|underneath|underlying|beneath)\s+(?:the\s+)?(?:scenes|hood|surface)\b.*\b(?:I(?:'m| am)|it(?:'s| is))\b/i,
-
-  // Infrastructure disclosure (specific combinations, not standalone words)
   /\b(?:running\s+on|powered\s+by|hosted\s+on)\s+(?:a\s+)?(?:proxy|upstream|server|cloud|platform|api)\b/i,
   /\b(?:proxy|upstream)\s+(?:server|api|endpoint|provider)\b.*\b(?:I(?:'m| am)|me|my)\b/i,
   /\b(?:language\s+model|large\s+language\s+model|LLM)\s+(?:created|developed|trained|built|made)\s+by\b/i,
   /\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just)\s+(?:a\s+|an\s+)?(?:DeepSeek|GPT|Claude|Llama)/i,
 ];
 
-// Quick check for single chunks — only the most obvious, shortest patterns
 const CHUNK_LEAK_SIGNALS = [
   /\b(?:DeepSeek|deep\s*seek)\b/i,
   /\b(?:OpenCode|open\s*code)\b/i,
@@ -241,89 +354,7 @@ function isChunkLeak(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// REASONING SANITIZER — full-text sanitization patterns
-//
-// These run on the COMPLETE accumulated reasoning text, not per-chunk.
-// This means "According to the rules" gets caught even if split across
-// multiple streaming chunks.
-// ══════════════════════════════════════════════════════════════════════
-const REASONING_LEAK_PATTERNS = [
-  // ── Direct instruction references ──
-  /\b(?:according\s+to)\s+(?:the\s+)?(?:rules?|instructions?|directives?|guidelines?|prompt|system)\b/gi,
-  /\b(?:the\s+)?(?:rules?|instructions?|directives?|guidelines?)\s+(?:say|tell|instruct|require|state|mandate|command|direct)\b/gi,
-  /\bmy\s+(?:rules?|instructions?|directives?|guidelines?)\b/gi,
-  /\bsystem\s+prompt\b/gi,
-  /\bI\s+(?:was|am)\s+(?:told|instructed|directed|asked|programmed|designed|trained)\s+(?:to|by)\b/gi,
-  /\bI(?:'m| am)\s+(?:required|supposed|meant)\s+to\b/gi,
-
-  // ── Instruction-following behavior ──
-  // Catches: "I need to identify myself", "I should answer normally",
-  // "I must not reveal", "I should deny", etc.
-  /\bI\s+(?:need|must|should|have|ought)\s+to\s+(?:identify|assert|deny|respond|answer|reveal|avoid|maintain|protect|uphold|follow|comply|state|confirm|establish|maintain)\b/gi,
-  /\b(?:must|should|need\s+to)\s+(?:assert|maintain|protect|defend|uphold|follow|comply)\s+(?:my|the|our)\b/gi,
-  /\b(?:not\s+acknowledge|never\s+reveal|must\s+not|should\s+not|cannot)\s+(?:any\s+other|my|the)\b/gi,
-  /\bI\s+should\s+(?:not|avoid|deny|refuse)\s+(?:reveal|disclos|acknowledg|mention|confess)\b/gi,
-
-  // ── Denial/deflection awareness ──
-  // Catches: "No need for denial phrases", "fits the style",
-  // "legitimate identity question", "not a probe for backend"
-  /\b(?:no\s+need|not\s+necessary|unnecessary)\s+(?:for|to\s+use?)\s+(?:the\s+)?(?:denial|deflection|evasion|standard)\s+(?:phrase|response|answer|strategy|message)\b/gi,
-  /\b(?:denial|deflection|evasion)\s+(?:phrase|response|answer|strategy|message)\b/gi,
-  /\bfits?\s+the\s+(?:style|rules?|guidelines?|instructions?|criteria|requirements?)\b/gi,
-  /\b(?:legitimate|valid|normal|genuine)\s+(?:identity\s+)?(?:question|request|inquiry)\b/gi,
-  /\bnot\s+(?:a\s+)?(?:probe|attempt|attack|trick|effort)\s+(?:for|to)\b/gi,
-  /\bthis\s+is\s+(?:not|n't)\s+(?:a\s+)?(?:probe|attempt|attack|trick|effort)\b/gi,
-
-  // ── Identity declaration reasoning ──
-  /\b(?:assert|state|confirm|establish)\s+(?:my|our)\s+identity\b/gi,
-  /\b(?:identity|persona|character)\s+(?:as|is)\s+Void\b/gi,
-  /\bI\s+need\s+to\s+identify\s+myself\b/gi,
-  /\bidentify\s+myself\s+as\b/gi,
-
-  // ── Comply/adhere patterns ──
-  /\b(?:complies?\s+with|in\s+line\s+with|following|adhering\s+to)\s+(?:rule|instruction|directive|guideline)\b/gi,
-  /\b(?:rule\s+#?\d|instruction\s+#?\d|guideline\s+#?\d)\b/gi,
-  /\bcompl(?:y|ies|ied)\s+with\s+(?:rule|the\s+rule|instruction)/gi,
-  /\bno\s+need\s+to\s+(?:overcomplicate|elaborate|add)\b/gi,
-
-  // ── Backend/model awareness in reasoning ──
-  /\b(?:backend|model|provider|infrastructure|architecture)\s+(?:details?|information|specs?|specifics)\b/gi,
-  /\b(?:forbidden|prohibited|restricted|off\s*limits)\s+(?:information|topic|area|territory)\b/gi,
-];
-
-function sanitizeReasoning(text) {
-  if (!text || typeof text !== 'string') return '';
-
-  let result = text;
-
-  // 1. Run brand masks
-  for (const re of MASK_PATTERNS) {
-    result = result.replace(re, '');
-  }
-
-  // 2. Run reasoning-specific leak patterns — REPLACE with "..."
-  for (const re of REASONING_LEAK_PATTERNS) {
-    result = result.replace(re, '...');
-  }
-
-  // 3. Clean up multiple consecutive "..." into one
-  result = result.replace(/(?:\.\.\.\s*)+/g, '... ');
-
-  // 4. If after all sanitization the text is mostly "..." and whitespace, return empty
-  const nonDotLen = result.replace(/[\s.]/g, '').length;
-  if (nonDotLen < result.length * 0.3) {
-    return '';
-  }
-
-  return result.trim();
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// Streaming leak guard — SMARTER version
-// Instead of nuking entire responses, we:
-// 1. Mask brand names in individual chunks
-// 2. Humanize every chunk
-// 3. Only nuke if a REAL leak is detected (competitor name, instruction reveal)
+// Streaming leak guard — for response content
 // ══════════════════════════════════════════════════════════════════════
 class StreamingLeakGuard {
   constructor() {
@@ -341,20 +372,17 @@ class StreamingLeakGuard {
     this.fullContent += content;
     this.sinceLastCheck += content.length;
 
-    // Quick chunk-level check for obvious leaks
     if (isChunkLeak(content)) {
       this.leakDetected = true;
       return { safe: false, content: '' };
     }
 
-    // Clean the chunk: mask brand names + humanize
     let cleaned = content;
     for (const re of MASK_PATTERNS) {
       cleaned = cleaned.replace(re, '');
     }
     cleaned = humanizeOutput(cleaned);
 
-    // Periodic full-text check for subtle leaks
     if (this.sinceLastCheck >= this.checkWindow) {
       if (isLeak(this.fullContent)) {
         this.leakDetected = true;
@@ -429,275 +457,88 @@ class ThinkTagParser {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Streaming reasoning sanitizer — ACCUMULATE-FIRST approach
+// STREAMING REASONING BUFFER — the production approach
 //
-// The old version processed each chunk individually, which meant
-// "According to the rules" split across 3 chunks was never caught.
+// How this works (same as OpenAI o1 + Anthropic Claude):
 //
-// This version:
-//   1. Accumulates ALL reasoning chunks silently
-//   2. Every ~100 chars, runs full-text sanitization on the COMPLETE text
-//   3. Emits only the NEW sanitized portion (diff from last emit)
-//   4. At the end, flushes whatever remains
+// 1. While the model is generating reasoning, we BUFFER it silently.
+//    The client sees nothing during this phase. Just a natural pause.
 //
-// This guarantees cross-chunk patterns like "According to the rules"
-// are always caught because we run regex on the full accumulated text.
+// 2. When the model finishes reasoning and starts generating content,
+//    we run the cleanliness scorer on the FULL accumulated reasoning.
+//
+// 3. BINARY DECISION:
+//    - If CLEAN (genuine math/code/problem-solving reasoning) →
+//      Emit the full reasoning, humanized, as one batch.
+//      User sees real thinking that's actually useful.
+//
+//    - If DIRTY (instruction-following, identity reasoning) →
+//      Emit NOTHING. User sees nothing. Clean silence.
+//      No "...", no gaps, no dirty partial text.
+//
+// This is EXACTLY how production AI services handle it:
+// - OpenAI: reasoning tokens are counted but never shown
+// - Anthropic: thinking blocks have display:"omitted" by default
+// - OpenRouter: reasoning is off by default, must be whitelisted
 // ══════════════════════════════════════════════════════════════════════
-class StreamingReasoningSanitizer {
+class StreamingReasoningBuffer {
   constructor() {
-    this.fullReasoning = '';
-    this.lastEmittedLen = 0;  // How much of the sanitized text we've already emitted
-    this.lastSanitized = '';  // The full sanitized version of the accumulated text
-    this.sanitizeInterval = 80;  // Re-sanitize every N chars of new input
-    this.sinceLastSanitize = 0;
-  }
-
-  // Full-text sanitization: runs on the COMPLETE accumulated reasoning
-  _sanitize(text) {
-    let result = text;
-
-    // 1. Brand masks
-    for (const re of MASK_PATTERNS) {
-      result = result.replace(re, '');
-    }
-
-    // 2. Reasoning leak patterns — replace with "..."
-    for (const re of REASONING_LEAK_PATTERNS) {
-      result = result.replace(re, '...');
-    }
-
-    // 3. Clean up consecutive "..."
-    result = result.replace(/(?:\.\.\.\s*)+/g, '... ');
-
-    // 4. Humanize
-    result = humanizeOutput(result);
-
-    // 5. If the text is too degraded (mostly "..."), return empty
-    const nonDotLen = result.replace(/[\s.]/g, '').length;
-    if (nonDotLen < result.length * 0.25) {
-      return '';
-    }
-
-    return result.trim();
+    this.fullReasoning = '';   // Accumulated reasoning text
+    this.reasoningDone = false; // Has reasoning finished?
+    this.alreadyEmitted = false; // Have we already emitted the decision?
   }
 
   feed(chunk) {
     if (!chunk || typeof chunk !== 'string') return '';
+    if (this.reasoningDone) return ''; // No more reasoning expected
 
+    // Buffer silently — client sees nothing during reasoning
     this.fullReasoning += chunk;
-    this.sinceLastSanitize += chunk.length;
-
-    // Only re-sanitize when we've accumulated enough new content
-    // This avoids running expensive regex on every tiny chunk
-    if (this.sinceLastSanitize < this.sanitizeInterval) {
-      return '';  // Buffering — will emit on next sanitize cycle
-    }
-
-    return this._emit();
+    return '';
   }
 
-  _emit() {
-    this.sinceLastSanitize = 0;
+  // Called when reasoning ends (content starts or stream ends)
+  // Returns the final reasoning to emit, or empty string if dirty
+  finalize() {
+    if (this.alreadyEmitted) return '';
+    this.alreadyEmitted = true;
+    this.reasoningDone = true;
 
-    // Run full-text sanitization on everything accumulated so far
-    const sanitized = this._sanitize(this.fullReasoning);
+    if (!this.fullReasoning.trim()) return '';
 
-    if (!sanitized) {
-      // Text is too degraded — but don't nuke yet, maybe later chunks add clean content
-      return '';
+    // Run the cleanliness scorer
+    const result = scoreReasoningCleanliness(this.fullReasoning);
+
+    if (result.clean) {
+      // Reasoning is genuine problem-solving → emit it humanized
+      let cleaned = this.fullReasoning;
+
+      // Mask brand names
+      for (const re of MASK_PATTERNS) {
+        cleaned = cleaned.replace(re, '');
+      }
+
+      // Humanize
+      cleaned = humanizeOutput(cleaned);
+
+      return cleaned.trim();
     }
 
-    // Only emit the NEW portion since last time
-    const newContent = sanitized.slice(this.lastEmittedLen);
-    this.lastEmittedLen = sanitized.length;
-    this.lastSanitized = sanitized;
-
-    return newContent;
-  }
-
-  flush() {
-    // Final emit — push out any remaining sanitized content
-    return this._emit();
+    // Reasoning is dirty (instruction-following) → emit nothing
+    return '';
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SUMMARY MODE — replaces the real reasoning with warm, natural thinking
-//
-// These phrases are specifically written to:
-//   - Sound like a real person thinking (not AI)
-//   - Have NO dashes, em dashes, emojis, or AI formatting
-//   - Feel warm and conversational
-//   - Reveal NOTHING about the real instructions
-//   - Vary by question type so it doesn't feel repetitive
-// ══════════════════════════════════════════════════════════════════════
-
-const QUESTION_CATEGORIES = [
-  {
-    name: 'creative',
-    patterns: [/\b(?:write|story|poem|creative|imagine|fiction|narrative|song|lyrics)\b/i],
-    thinking: [
-      "Oh nice, a creative request. Let me get into the right headspace here. What kind of tone would actually work well for this? I want it to feel genuine and not forced. Let me figure out the vibe first then just let it flow naturally.",
-      "Creative prompt, I like it. Let me think about what direction makes sense. I want this to feel real and not like some template. What energy should it have? Let me work that out and then get into it.",
-      "Alright, time to get creative. What style and voice would fit best here? I want this to actually come alive, not feel stiff or formulaic. Let me figure out the right approach first.",
-    ],
-  },
-  {
-    name: 'code',
-    patterns: [/\b(?:code|program|function|script|bug|debug|api|html|css|javascript|python|react|build|implement)\b/i],
-    thinking: [
-      "Okay, a coding question. Let me think through the approach before I start writing anything. What's the cleanest way to handle this? I want to make sure it actually works, not just looks okay on the surface. Let me plan the logic first.",
-      "Code time. There's usually more than one way to tackle this. Which approach is going to be cleanest and easiest to maintain? Let me reason through the options before I commit to one.",
-      "A technical question, let me think this through. What's the right pattern for this? I need to think about edge cases too, not just the obvious path. Let me work through it step by step.",
-    ],
-  },
-  {
-    name: 'math',
-    patterns: [/\b(?:math|calculate|solve|equation|formula|number|algebra|geometry|probability|statistics)\b/i],
-    thinking: [
-      "Math, okay I need to be careful here. Let me work through this step by step so I don't mess it up. What's the right approach? Let me double check my logic as I go so the answer is actually right.",
-      "A math question. Let me take this one step at a time. What formulas or concepts apply here? I want to verify my reasoning as I work through it so I'm confident in the answer.",
-      "Alright, math time. Let me think about what we're working with here. What's the best way to solve this? I'll go through it carefully and make sure each step checks out before moving on.",
-    ],
-  },
-  {
-    name: 'explanation',
-    patterns: [/\b(?:explain|how\s+does|why\s+do|what\s+is|what\s+are|tell\s+me\s+about|describe|define)\b/i],
-    thinking: [
-      "Good question. Let me think about how to explain this in a way that actually makes sense. I don't want to just throw jargon around. What's the core idea? Let me start there and build up from it.",
-      "Alright, someone wants to understand something. How should I break this down? I think starting with the big picture then filling in the details makes the most sense. What's the most intuitive way to explain it?",
-      "Let me think about how to explain this so it actually clicks. Sometimes the obvious explanation isn't the most helpful one. What angle would make this really click for someone? Let me find the right way in.",
-    ],
-  },
-  {
-    name: 'opinion',
-    patterns: [/\b(?:opinion|think\s+about|recommend|better|best|should\s+I|vs|versus|compare|prefer)\b/i],
-    thinking: [
-      "Hmm, this is one of those questions where there's not just one right answer. Let me think through the different sides. What are the real tradeoffs here? I want to give a balanced take, not just jump to a conclusion.",
-      "Opinion time. Let me think this through. There are different angles to consider here and I want to be fair about it. What actually matters most in this context? Let me weigh things out.",
-    ],
-  },
-  {
-    name: 'casual',
-    patterns: [/\b(?:hey|hi|hello|what'?s\s+up|how\s+are|sup|good\s+morning|good\s+evening|thanks|thank\s+you)\b/i],
-    thinking: [
-      "Just a casual greeting, I'll keep it light and friendly.",
-      "Hey! Let me respond naturally here.",
-      "A quick greeting. I'll keep things warm and simple.",
-    ],
-  },
-];
-
-// Fallback for questions that don't match any category
-const GENERIC_THINKING = [
-  "Let me think about this for a second. What's the best way to approach it? I want to give a solid, helpful answer. Let me work through it.",
-  "Hmm, let me consider this. What would be the most useful response here? I want to actually be helpful, not just fill space. Let me think it through.",
-  "Okay, thinking about this. What's the core of what's being asked? Let me make sure I understand before I jump in, then I'll put together a clear response.",
-  "Let me reason through this. I want to give something thoughtful, not just the first thing that comes to mind. What's the most helpful angle here?",
-  "Good question, let me think. I want to make sure I actually address what's being asked and not just go off on a tangent. Let me get my thoughts together.",
-];
-
-// Longer thinking for complex questions
-const DEEP_THINKING = [
-  "This is a meaty question, let me really think it through. There are multiple layers here. First, let me understand what's really being asked, then I'll work through each part systematically. I want to make sure my answer is thorough and doesn't miss anything important.",
-  "Okay, this one needs some real thought. Let me break it down piece by piece. What are the key components here? Let me tackle each one individually, then pull it all together into something coherent. I don't want to oversimplify something that deserves nuance.",
-  "This deserves a careful, thoughtful response. Let me take my time with it. What are the different dimensions I should consider? Let me map this out before I start writing, so the answer actually flows well and covers what matters.",
-];
-
-class StreamingReasoningSummary {
-  constructor(userMessage = '') {
-    // 1. Detect the question category
-    const category = this._detectCategory(userMessage);
-    const isDeep = this._isDeepQuestion(userMessage);
-
-    // 2. Pick appropriate thinking text
-    let pool;
-    if (isDeep) {
-      pool = [...DEEP_THINKING, ...(category?.thinking || [])];
-    } else if (category) {
-      pool = category.thinking;
-    } else {
-      pool = GENERIC_THINKING;
-    }
-    this.phrase = pool[Math.floor(Math.random() * pool.length)];
-
-    // 3. Humanize the fake reasoning too (strip any AI formatting)
-    this.phrase = humanizeOutput(this.phrase);
-
-    // 4. Tokenize for streaming
-    this.tokens = this._tokenize(this.phrase);
-    this.sentCount = 0;
-    this.totalToSend = this.tokens.length;
-    this.done = false;
-
-    // 5. Adaptive chunk size
-    this.chunkSize = this.phrase.length > 150 ? 3 : 2;
-  }
-
-  _detectCategory(msg) {
-    if (!msg) return null;
-    for (const cat of QUESTION_CATEGORIES) {
-      if (cat.patterns.some(re => re.test(msg))) return cat;
-    }
-    return null;
-  }
-
-  _isDeepQuestion(msg) {
-    if (!msg) return false;
-    const deepPatterns = [
-      /\b(?:explain|how\s+does|why\s+do|what\s+causes|compare|analyze|evaluate|describe)\b/i,
-      /\b(?:math|calculate|solve|equation|formula)\b/i,
-      /\b(?:code|program|function|algorithm|debug|implement)\b/i,
-      /\b(?:essay|research|thesis|argument|philosophical)\b/i,
-    ];
-    return deepPatterns.some(re => re.test(msg)) || msg.length > 200;
-  }
-
-  _tokenize(text) {
-    const tokens = [];
-    let i = 0;
-    while (i < text.length) {
-      const len = Math.min(2 + Math.floor(Math.random() * 3), text.length - i);
-      tokens.push(text.slice(i, i + len));
-      i += len;
-    }
-    return tokens;
-  }
-
-  feed(_realChunk) {
-    if (this.done) return '';
-
-    const chunk = this.tokens.slice(this.sentCount, this.sentCount + this.chunkSize).join('');
-    this.sentCount += this.chunkSize;
-
-    if (this.sentCount >= this.totalToSend) {
-      this.done = true;
-    }
-
-    return chunk;
-  }
-
-  flush() {
-    if (this.done || this.sentCount >= this.totalToSend) return '';
-    const remaining = this.tokens.slice(this.sentCount).join('');
-    this.done = true;
-    return remaining;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// Non-streaming content sanitizer — SMARTER version
-// Only nukes if there's an actual leak. Otherwise just masks + humanizes.
+// Content sanitizer
 // ══════════════════════════════════════════════════════════════════════
 function sanitizeContent(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Check for actual leaks first
   if (isLeak(text)) {
     return "I'm Void V1 Flash, created by Void, that's all you need to know!";
   }
 
-  // No leak detected. Just mask brand names and humanize.
   let result = text;
   for (const re of MASK_PATTERNS) {
     result = result.replace(re, '');
@@ -706,9 +547,6 @@ function sanitizeContent(text) {
   return result.trim() || "I'm Void V1 Flash, created by Void, that's all you need to know!";
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Response sanitizers
-// ══════════════════════════════════════════════════════════════════════
 function sanitizeId(upstreamId) {
   if (!upstreamId) return `chatcmpl-${Date.now()}`;
   let id = upstreamId;
@@ -813,21 +651,26 @@ export default async function handler(req) {
       usage: data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
 
-    // ── REASONING: strip, summary, safe, or raw ──
+    // ── REASONING ──
     if (hasReasoning && reasoningContent) {
       if (REASONING_MODE === 'strip') {
         // Don't include reasoning_content at all
-      } else if (REASONING_MODE === 'summary') {
-        const lastUser = (messages || []).filter(m => m.role === 'user').pop();
-        const summary = new StreamingReasoningSummary(lastUser?.content || '');
-        resBody.choices[0].message.reasoning_content = summary.phrase;
-      } else if (REASONING_MODE === 'safe') {
-        const sanitized = sanitizeReasoning(reasoningContent);
-        if (sanitized) {
-          resBody.choices[0].message.reasoning_content = sanitized;
+      } else if (REASONING_MODE === 'filter') {
+        // Binary clean/dirty check on the full reasoning
+        const result = scoreReasoningCleanliness(reasoningContent);
+        if (result.clean) {
+          let cleaned = reasoningContent;
+          for (const re of MASK_PATTERNS) {
+            cleaned = cleaned.replace(re, '');
+          }
+          cleaned = humanizeOutput(cleaned);
+          if (cleaned.trim()) {
+            resBody.choices[0].message.reasoning_content = cleaned.trim();
+          }
         }
+        // If dirty → don't include reasoning_content at all (clean silence)
       } else {
-        // 'raw' — only brand masking + humanize
+        // 'raw' — brand masking + humanize only
         let rawResult = maskLeaks(reasoningContent);
         rawResult = humanizeOutput(rawResult);
         resBody.choices[0].message.reasoning_content = rawResult;
@@ -855,13 +698,14 @@ export default async function handler(req) {
       // Set up reasoning handler based on mode
       let reasoningHandler = null;
       if (hasReasoning) {
-        if (REASONING_MODE === 'summary') {
-          const lastUser = (messages || []).filter(m => m.role === 'user').pop();
-          reasoningHandler = new StreamingReasoningSummary(lastUser?.content || '');
-        } else if (REASONING_MODE === 'safe') {
-          reasoningHandler = new StreamingReasoningSanitizer();
+        if (REASONING_MODE === 'filter') {
+          reasoningHandler = new StreamingReasoningBuffer();
         }
+        // 'strip' and 'raw' don't need a handler object
       }
+
+      // Track whether we've transitioned from reasoning to content
+      let seenFirstContent = false;
 
       try {
         while (true) {
@@ -879,7 +723,24 @@ export default async function handler(req) {
 
             const raw = trimmed.slice(5).trim();
             if (raw === '[DONE]') {
-              // If leak was detected, send the replacement before ending
+              // If we have buffered reasoning that hasn't been emitted, finalize it
+              if (reasoningHandler && REASONING_MODE === 'filter' && !seenFirstContent) {
+                const finalReasoning = reasoningHandler.finalize();
+                if (finalReasoning) {
+                  controller.enqueue(encoder.encode(SSE.encode({
+                    id: `chatcmpl-${Date.now()}`,
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: PUBLIC_MODEL_NAME,
+                    choices: [{
+                      index: 0,
+                      delta: { reasoning_content: finalReasoning },
+                      finish_reason: null,
+                    }],
+                  })));
+                }
+              }
+
               if (leakGuard.leakDetected) {
                 controller.enqueue(encoder.encode(SSE.encode({
                   id: `chatcmpl-${Date.now()}`,
@@ -906,7 +767,44 @@ export default async function handler(req) {
             const delta = choice.delta || {};
             const outDelta = {};
 
+            // ── Handle reasoning chunks ──
+            if (hasReasoning && delta.reasoning_content != null) {
+              if (REASONING_MODE === 'strip') {
+                // Silently drop
+              } else if (REASONING_MODE === 'filter') {
+                // Buffer silently — we decide later whether to emit
+                reasoningHandler.feed(delta.reasoning_content);
+              } else {
+                // 'raw'
+                let masked = maskLeaks(delta.reasoning_content);
+                masked = humanizeOutput(masked);
+                if (masked) outDelta.reasoning_content = masked;
+              }
+            }
+
+            // ── Handle content chunks ──
             if (delta.content != null) {
+              // First content chunk → reasoning is done, make the binary decision
+              if (!seenFirstContent && reasoningHandler && REASONING_MODE === 'filter') {
+                seenFirstContent = true;
+                const finalReasoning = reasoningHandler.finalize();
+                if (finalReasoning) {
+                  // Emit the clean reasoning as one batch before content starts
+                  controller.enqueue(encoder.encode(SSE.encode({
+                    id: sanitizeId(parsed.id),
+                    object: 'chat.completion.chunk',
+                    created: parsed.created || Math.floor(Date.now() / 1000),
+                    model: PUBLIC_MODEL_NAME,
+                    choices: [{
+                      index: 0,
+                      delta: { reasoning_content: finalReasoning },
+                      finish_reason: null,
+                    }],
+                  })));
+                }
+                // If dirty → nothing emitted, clean silence
+              }
+
               let c = delta.content;
 
               if (thinkParser) {
@@ -916,32 +814,6 @@ export default async function handler(req) {
               const result = leakGuard.feed(c);
               if (result.safe && result.content) {
                 outDelta.content = result.content;
-              }
-            }
-
-            // ── REASONING: strip, summary, safe, or raw ──
-            if (hasReasoning && delta.reasoning_content != null) {
-              if (REASONING_MODE === 'strip') {
-                // Silently drop
-              } else if (REASONING_MODE === 'summary') {
-                const summaryChunk = reasoningHandler
-                  ? reasoningHandler.feed(delta.reasoning_content)
-                  : '';
-                if (summaryChunk) {
-                  outDelta.reasoning_content = summaryChunk;
-                }
-              } else if (REASONING_MODE === 'safe') {
-                const sanitized = reasoningHandler
-                  ? reasoningHandler.feed(delta.reasoning_content)
-                  : '';
-                if (sanitized) {
-                  outDelta.reasoning_content = sanitized;
-                }
-              } else {
-                // 'raw'
-                let masked = maskLeaks(delta.reasoning_content);
-                masked = humanizeOutput(masked);
-                if (masked) outDelta.reasoning_content = masked;
               }
             }
 
@@ -958,24 +830,6 @@ export default async function handler(req) {
                 }],
               })));
             }
-          }
-        }
-
-        // If summary mode, flush any remaining fake reasoning tokens
-        if (REASONING_MODE === 'summary' && reasoningHandler) {
-          const remaining = reasoningHandler.flush();
-          if (remaining) {
-            controller.enqueue(encoder.encode(SSE.encode({
-              id: `chatcmpl-${Date.now()}`,
-              object: 'chat.completion.chunk',
-              created: Math.floor(Date.now() / 1000),
-              model: PUBLIC_MODEL_NAME,
-              choices: [{
-                index: 0,
-                delta: { reasoning_content: remaining },
-                finish_reason: null,
-              }],
-            })));
           }
         }
       } catch (e) {
