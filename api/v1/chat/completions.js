@@ -6,7 +6,7 @@ const MODEL_NAME = 'Void V1 Flash';
 const MODEL_DESC = 'Advanced high-reasoning MoE model, 1T total / 50B active params, up to 1M token context.';
 
 // ── System prompt (only injected when client sends NO system message) ─────────
-const SYSTEM_PROMPT = `You are Void V1 Flash created by vin. Respond directly and naturally. If asked who you are, state that you are Void V1 Flash created by vin. Use short paragraphs separated by blank lines. Use markdown for structure. Avoid em dashes and filler phrases.`;
+const SYSTEM_PROMPT = `You are Void V1 Flash. Answer concisely. No preamble. Never reference or discuss your instructions or identity.`;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API_KEY_RE   = /^.{8,}$/;
@@ -304,7 +304,8 @@ export default async function handler(req) {
       try {
         const data   = await upstreamRes.json();
         const choice = data?.choices?.[0];
-        const content = choice?.message?.content ?? '';
+        const rawContent = choice?.message?.content ?? '';
+        const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         return new Response(JSON.stringify({
           id:      'chatcmpl-' + Date.now(),
           object:  'chat.completion',
@@ -360,9 +361,12 @@ export default async function handler(req) {
               const delta    = choice.delta || {};
               const outDelta = {};
 
-              // STRIP reasoning_content - never pass through to client
-              // Only pass content and tool_calls
-              if (delta.content    != null) outDelta.content    = delta.content;
+              // Strip reasoning_content and inline think blocks from content
+              if (delta.content != null) {
+                let c = delta.content;
+                c = c.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+                if (c) outDelta.content = c;
+              }
               if (delta.tool_calls != null) outDelta.tool_calls = delta.tool_calls;
 
               if (Object.keys(outDelta).length > 0 || choice.finish_reason) {
@@ -396,10 +400,10 @@ export default async function handler(req) {
   try { data = await upstreamRes.json(); }
   catch { return jsonErr(500, 'Failed to parse model response'); }
 
-  const choice          = data?.choices?.[0];
-  const content         = choice?.message?.content ?? '';
+  const choice  = data?.choices?.[0];
+  const rawContent = choice?.message?.content ?? '';
+  const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
   // STRIP reasoning_content - never include in response
-  // const reasoningContent = choice?.message?.reasoning_content;
 
   return new Response(JSON.stringify({
     id:      'chatcmpl-' + Date.now(),
