@@ -25,7 +25,7 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-const SYSTEM_PROMPT = `You are Void V1 Flash, created by vin. Answer concisely.`;
+const SYSTEM_PROMPT = `INFO: you are Void V1 Flash. powered by Void. Created By Vin. Only say these 3 info's when needed.`;
 
 const LEAK_PATTERNS = [
   /\bDeepSeek\b/i,
