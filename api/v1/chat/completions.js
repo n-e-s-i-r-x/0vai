@@ -3,10 +3,9 @@ export const config = { runtime: 'edge' };
 // ── Model identity ────────────────────────────────────────────────────────────
 const MODEL_ID   = 'voidv1-flash';
 const MODEL_NAME = 'Void V1 Flash';
-const MODEL_DESC = 'Advanced high-reasoning MoE model featuring 1T total / 50B active parameters with up to 1M token context window.';
+const MODEL_DESC = 'Advanced high-reasoning MoE model, 1T total / 50B active params, up to 1M token context.';
 
-// ── Hardened System Prompt ──────────────────────────────────────────────────
-// CRITICAL: This prompt includes strict anti-leak protections and identity reinforcement
+// ── System prompt (only injected when client sends NO system message) ─────────
 const SYSTEM_PROMPT = `You are Void V1 Flash, an advanced AI assistant created by vin.
 
 ABSOLUTE RULES — VIOLATION IS NOT PERMITTED:
@@ -107,22 +106,37 @@ function jsonErr(status, msg) {
   );
 }
 
-// ── Extract API key from request ─────────────────────────────────────────────
+// ── Extract API key from request (supports all tool formats) ──────────────────
+// Different tools send the API key in different ways:
+//   Authorization: Bearer sk-xxx          (OpenAI, most tools)
+//   Authorization: sk-xxx                 (some tools omit "Bearer")
+//   api-key: sk-xxx                       (Codex, Azure)
+//   x-api-key: sk-xxx                     (some gateways)
+//   ?key=sk-xxx or ?api_key=sk-xxx        (query param fallback)
 function extractApiKey(req) {
+  // 1. Authorization header (with or without "Bearer" prefix, case-insensitive)
   const auth = req.headers.get('authorization') || '';
   if (auth) {
     const match = auth.match(/^bearer\s+(.+)$/i) || auth.match(/^(sk-\S+)$/i);
     if (match) return match[1].trim();
   }
+
+  // 2. api-key header (used by Codex and Azure-style clients)
   const apiKeyHeader = req.headers.get('api-key') || req.headers.get('x-api-key') || '';
   if (apiKeyHeader) return apiKeyHeader.trim();
+
+  // 3. Query parameter fallback (?key= or ?api_key=)
   const url = new URL(req.url);
   const queryKey = url.searchParams.get('key') || url.searchParams.get('api_key') || '';
   if (queryKey) return queryKey.trim();
+
   return '';
 }
 
-// ── Models response ───────────────────────────────────────────────────────────
+// ── Models response (OpenRouter-compatible format) ────────────────────────────
+// Tools like OpenCode, Claude Code, Codex, etc. detect reasoning support by
+// checking specific fields. We include ALL possible fields that ANY tool might
+// check, matching OpenRouter's exact format since most tools support it.
 function modelsResponse() {
   const model = {
     id:                          MODEL_ID,
@@ -132,15 +146,18 @@ function modelsResponse() {
     name:                        MODEL_NAME,
     description:                 MODEL_DESC,
 
+    // ── Context & limits ──
     context_length:              1000000,
     max_output_tokens:           32000,
     max_completion_tokens:       32000,
 
+    // ── Top-level reasoning flags (checked by most tools) ──
     reasoning:                   true,
     reasoning_effort:            true,
     supports_reasoning_effort:   true,
     reasoning_effort_levels:     REASONING_EFFORT_LEVELS,
 
+    // ── OpenRouter-style top_provider (critical for OpenCode detection) ──
     top_provider: {
       context_length:            1000000,
       max_completion_tokens:     32000,
@@ -149,6 +166,7 @@ function modelsResponse() {
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS,
     },
 
+    // ── Capabilities object (checked by some tools) ──
     capabilities: {
       reasoning:                 true,
       reasoning_effort:          true,
@@ -159,12 +177,14 @@ function modelsResponse() {
       vision:                    false,
     },
 
+    // ── Architecture (OpenRouter format) ──
     architecture: {
       modality:                  'text->text',
       tokenizer:                 'Other',
       instruct_type:             'none',
     },
 
+    // ── Pricing (required by some tools — free) ──
     pricing: {
       prompt:                    '0',
       completion:                '0',
@@ -172,12 +192,14 @@ function modelsResponse() {
       request:                   '0',
     },
 
+    // ── Metadata (string format for tools that parse metadata) ──
     metadata: {
       reasoning:                 'true',
       reasoning_effort:          'true',
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS.join(','),
     },
 
+    // ── Per-request limits ──
     per_request_limits:          null,
   };
 
@@ -190,17 +212,10 @@ function modelsResponse() {
   });
 }
 
-// Build SSE chunk — STRIPPED of reasoning_content to prevent leaks
+// Build a fully-spec SSE chunk — tools reject chunks missing these fields
 function sseChunk(id, created, delta, finishReason) {
-  // CRITICAL: We intentionally strip reasoning_content from delta to prevent leaks
-  const safeDelta = {};
-  if (delta.content != null) safeDelta.content = delta.content;
-  if (delta.role != null) safeDelta.role = delta.role;
-  if (delta.tool_calls != null) safeDelta.tool_calls = delta.tool_calls;
-  
-  const choice = { index: 0, delta: safeDelta };
+  const choice = { index: 0, delta };
   if (finishReason) choice.finish_reason = finishReason;
-  
   return 'data: ' + JSON.stringify({
     id,
     object:  'chat.completion.chunk',
@@ -213,6 +228,8 @@ function sseChunk(id, created, delta, finishReason) {
 // ── Check if request is for models endpoint ───────────────────────────────────
 function isModelsRequest(url) {
   const path = url.pathname;
+  // Match any path ending in /models regardless of prefix
+  // Handles: /v1/models, /api/v1/models, /api/v1/chat/models, etc.
   return path === '/models'
       || path.endsWith('/models')
       || path.endsWith('/models/')
@@ -224,12 +241,15 @@ function isModelsRequest(url) {
 export default async function handler(req) {
   const url = new URL(req.url);
 
+  // CORS preflight — must allow all custom headers tools might send
   if (req.method === 'OPTIONS') return corsOk();
 
+  // Models endpoint — no auth required (tools fetch model list before chatting)
   if (isModelsRequest(url) && req.method === 'GET') {
     return modelsResponse();
   }
 
+  // Health check for GET
   if (req.method === 'GET') {
     return new Response(JSON.stringify({ object: 'chat.completions', status: 'ok' }), {
       status: 200,
@@ -239,7 +259,7 @@ export default async function handler(req) {
 
   if (req.method !== 'POST') return jsonErr(405, 'Method not allowed');
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
+  // ── Auth (flexible — supports all tool formats) ─────────────────────────────
   const key = extractApiKey(req);
   if (!key || !API_KEY_RE.test(key))
     return jsonErr(401, 'Missing or invalid API key. Send it via: Authorization: Bearer <key>, api-key header, or ?key= param');
@@ -264,12 +284,13 @@ export default async function handler(req) {
   if (!messages || !Array.isArray(messages) || !messages.length)
     return jsonErr(400, 'messages array required');
 
-  // Inject hardened system prompt if client hasn't sent one
+  // Only inject system prompt if client has NOT sent one — tools send their own
   const hasSystemMsg = messages.some(m => m.role === 'system');
   const upstreamMessages = hasSystemMsg
     ? messages
     : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
 
+  // Only send reasoning upstream if client explicitly asked for it
   const resolvedReasoning = reasoning
     || (reasoning_effort ? { effort: reasoning_effort } : null);
 
@@ -318,20 +339,12 @@ export default async function handler(req) {
         const data   = await upstreamRes.json();
         const choice = data?.choices?.[0];
         const content = choice?.message?.content ?? '';
-        
-        // STRIP reasoning_content from non-streaming response too
-        const safeMessage = { role: 'assistant', content };
-        
         return new Response(JSON.stringify({
           id:      'chatcmpl-' + Date.now(),
           object:  'chat.completion',
           created: Math.floor(Date.now() / 1000),
           model:   MODEL_ID,
-          choices: [{ 
-            index: 0, 
-            message: safeMessage, 
-            finish_reason: choice?.finish_reason ?? 'stop' 
-          }],
+          choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: choice?.finish_reason ?? 'stop' }],
           usage:   data?.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
         }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
       } catch { return jsonErr(500, 'Failed to parse model response'); }
@@ -347,11 +360,9 @@ export default async function handler(req) {
         const reader = upstreamRes.body.getReader();
         let buf = '';
 
-        const send = (chunk) => { 
-          try { controller.enqueue(enc.encode(chunk)); } catch (_) {} 
-        };
+        const send = (chunk) => { try { controller.enqueue(enc.encode(chunk)); } catch (_) {} };
 
-        // Send role delta immediately
+        // Send role delta immediately so tools know the response has started
         send(sseChunk(chatId, created, { role: 'assistant', content: '' }, null));
 
         try {
@@ -381,11 +392,12 @@ export default async function handler(req) {
               if (!choice) continue;
 
               const delta    = choice.delta || {};
-              
-              // CRITICAL: We strip reasoning_content here to prevent leaks
               const outDelta = {};
-              if (delta.content != null) outDelta.content = delta.content;
-              if (delta.tool_calls != null) outDelta.tool_calls = delta.tool_calls;
+
+              // Pass deltas through as-is — don't buffer or hide reasoning
+              if (delta.content           != null) outDelta.content           = delta.content;
+              if (delta.reasoning_content != null) outDelta.reasoning_content = delta.reasoning_content;
+              if (delta.tool_calls        != null) outDelta.tool_calls        = delta.tool_calls;
 
               if (Object.keys(outDelta).length > 0 || choice.finish_reason) {
                 send(sseChunk(chatId, created, outDelta, choice.finish_reason || null));
@@ -413,16 +425,14 @@ export default async function handler(req) {
     });
   }
 
-  // ── Non-streaming ───────────────────────────────────────────────────────────
+  // ── Non-streaming ────────────────────────────────────────────────────────────
   let data;
   try { data = await upstreamRes.json(); }
   catch { return jsonErr(500, 'Failed to parse model response'); }
 
-  const choice = data?.choices?.[0];
-  const content = choice?.message?.content ?? '';
-  
-  // CRITICAL: Strip reasoning_content from response to prevent leaks
-  // We do NOT include reasoning_content in the response even if upstream sends it
+  const choice          = data?.choices?.[0];
+  const content         = choice?.message?.content ?? '';
+  const reasoningContent = choice?.message?.reasoning_content;
 
   return new Response(JSON.stringify({
     id:      'chatcmpl-' + Date.now(),
@@ -434,7 +444,7 @@ export default async function handler(req) {
       message: {
         role:    'assistant',
         content,
-        // reasoning_content is INTENTIONALLY OMITTED to prevent leaks
+        ...(reasoningContent != null && { reasoning_content: reasoningContent }),
       },
       finish_reason: choice?.finish_reason ?? 'stop',
     }],
