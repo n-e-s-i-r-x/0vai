@@ -239,8 +239,12 @@ function lineContainsFragment(line) {
 function sanitizeReasoningContent(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Fix squished spacing from upstream first
-  let result = humanizeOutput(text);
+  // Fix squished spacing: insert space at lowercase→uppercase boundary
+  // and after sentence-ending punctuation with no space
+  let result = text;
+  result = result.replace(/([a-z])([A-Z][a-z])/g, '$1 $2');
+  result = result.replace(/([.!?])([A-Z])/g, '$1 $2');
+  result = result.replace(/([a-z])(I'm|I've|I'll|I'd|I am|I have|I will|I would)/g, '$1 $2');
 
   const lines = result.split('\n');
   const cleaned = lines.map(line => {
@@ -570,11 +574,9 @@ export default async function handler(req) {
       usage: data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
 
-    // FIX: In passthrough mode, sanitize reasoning before sending
+    // Passthrough: sanitize reasoning and emit as separate field
     if (hasReasoning && reasoningContent && REASONING_MODE === 'passthrough') {
-      let cleanedReasoning = sanitizeReasoningContent(reasoningContent);
-      cleanedReasoning = humanizeOutput(cleanedReasoning);
-      resBody.choices[0].message.reasoning_content = cleanedReasoning;
+      resBody.choices[0].message.reasoning_content = sanitizeReasoningContent(reasoningContent);
     }
 
     return new Response(JSON.stringify(resBody), {
@@ -601,7 +603,6 @@ export default async function handler(req) {
       // frontend's streamParsed() can route them into the think block.
       // We wrap in <think>...</think> tags so the existing parser on the
       // frontend handles them correctly.
-      let reasoningOpen = false;
 
       const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
       const makeChunk = (id, created, delta, finishReason) => ({
@@ -658,18 +659,13 @@ export default async function handler(req) {
 
             const delta = choice.delta || {};
 
-            // ── FIX: Reasoning chunks — passthrough mode wraps in <think> tags
-            // and sanitizes before emitting as content so frontend think block works
+            // ── Reasoning chunks — emit as delta.reasoning_content (not wrapped in content)
+            // so the frontend's native think-block parser handles rendering.
             if (hasReasoning && delta.reasoning_content != null) {
               if (REASONING_MODE === 'passthrough') {
-                let reasoningChunk = sanitizeReasoningContent(delta.reasoning_content);
+                const reasoningChunk = sanitizeReasoningContent(delta.reasoning_content);
                 if (reasoningChunk && reasoningChunk.trim()) {
-                  // Open think tag on first chunk
-                  if (!reasoningOpen) {
-                    emit(makeChunk(parsed.id, parsed.created, { content: '<think>' }, null));
-                    reasoningOpen = true;
-                  }
-                  emit(makeChunk(parsed.id, parsed.created, { content: reasoningChunk }, null));
+                  emit(makeChunk(parsed.id, parsed.created, { reasoning_content: reasoningChunk }, null));
                 }
               }
               // 'strip': silently drop — do nothing
@@ -678,12 +674,6 @@ export default async function handler(req) {
             // ── Content chunks ──
             if (delta.content != null) {
               let c = delta.content;
-
-              // Close reasoning block before content starts
-              if (reasoningOpen) {
-                emit(makeChunk(parsed.id, parsed.created, { content: '</think>' }, null));
-                reasoningOpen = false;
-              }
 
               if (thinkParser) {
                 c = thinkParser.feed(c);
