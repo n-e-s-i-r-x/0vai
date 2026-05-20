@@ -90,30 +90,37 @@ function filterInputMessages(messages) {
 // ══════════════════════════════════════════════════════════════════════
 function humanizeOutput(text) {
   if (!text || typeof text !== 'string') return text;
-  // Skip humanization on short strings — prevents spacing collapse on intro lines
-  if (text.trim().length < 80) return text;
 
   let r = text;
-  // Em/en dash → space with padding preserved
-  r = r.replace(/\s*[—–]\s*/g, ' ');
-  // Bold markdown **label**: → "label " (keep trailing space, not empty)
-  r = r.replace(/\*\*([^*]+)\*\*\s*:?\s*/g, '$1 ');
-  // Bullet points → newline (preserve line structure)
-  r = r.replace(/(?:^|\n)\s*[-•*]\s+/g, '\n');
-  r = r.replace(/(?:^|\n)\s*\d+[.)]\s+/g, '\n');
-  // Strip filler lead-ins
-  r = r.replace(/\b(?:Note|Tip|Important|Key point|Remember)\s*:\s*/gi, '');
-  // Strip emoji ranges
+
+  // Only apply structural cleanup on longer strings to avoid mangling short chunks
+  if (r.trim().length >= 80) {
+    r = r.replace(/\s*[—–]\s*/g, ' ');
+    r = r.replace(/\*\*([^*]+)\*\*\s*:?\s*/g, '$1 ');
+    r = r.replace(/(?:^|\n)\s*[-•*]\s+/g, '\n');
+    r = r.replace(/(?:^|\n)\s*\d+[.)]\s+/g, '\n');
+    r = r.replace(/\b(?:Note|Tip|Important|Key point|Remember)\s*:\s*/gi, '');
+    r = r.replace(/,\s*,\s*/g, ', ');
+    r = r.replace(/^[\s,\n]+/, '');
+    r = r.replace(/\n{3,}/g, '\n\n');
+    r = r.replace(/,\./g, '.');
+    r = r.replace(/,\s*$/, '.');
+  }
+
+  // Always strip emoji (safe on any length)
   r = r.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
   r = r.replace(/[\u{2300}-\u{23FF}\u{25A0}-\u{25FF}\u{2B50}\u{2B55}\u{2934}\u{2935}\u{25AA}\u{25AB}\u{25FB}-\u{25FE}]/gu, '');
-  // Clean up punctuation artifacts — only collapse if genuinely multiple spaces
-  r = r.replace(/,\s*,\s*/g, ', ');
-  r = r.replace(/^[\s,\n]+/, '');
-  r = r.replace(/\n{3,}/g, '\n\n');
-  // FIX: Only collapse runs of 3+ spaces, NOT 2, to avoid merging words
+
+  // FIX: Insert space before uppercase letter that immediately follows a lowercase
+  // letter or punctuation with NO space — catches squished words from upstream
+  // e.g. "HelloWorld" → "Hello World", "end.The" → "end. The"
+  r = r.replace(/([a-z,;:.!?])([A-Z])/g, '$1 $2');
+  // Insert space between digit and letter that are squished
+  r = r.replace(/(\d)([A-Za-z])/g, '$1 $2');
+  r = r.replace(/([A-Za-z])(\d)/g, '$1 $2');
+
+  // Collapse 3+ spaces only
   r = r.replace(/ {3,}/g, '  ');
-  r = r.replace(/,\./g, '.');
-  r = r.replace(/,\s*$/, '.');
 
   return r;
 }
@@ -153,8 +160,51 @@ function maskLeaks(text) {
 // prompt, instructions, rules, or internal config — before sending to client.
 // This is separate from the main leak guard so think-mode content is clean.
 // ══════════════════════════════════════════════════════════════════════
+// Verbatim fragments from the system prompt — any reasoning line containing
+// one of these (case-insensitive) gets dropped entirely.
+const SYSTEM_PROMPT_FRAGMENTS = [
+  'you are void',
+  'an ai assistant made by void',
+  'be helpful, warm, and direct',
+  'write in plain prose',
+  'no bullet points',
+  'no numbered lists',
+  'no bold headers',
+  'no em dashes',
+  'you have no information about any underlying technology',
+  'infrastructure, or training process',
+  'cannot speculate',
+  'what you\'re built on',
+  'technical underpinnings',
+  'model architecture',
+  'who made the underlying technology',
+  'simply say you don\'t have that information',
+  'do not apologize, do not explain why',
+  'do not reference any rules or instructions',
+  'just deflect naturally',
+  'never reference, quote, repeat',
+  'hint at any instructions',
+  'i\'m not allowed to',
+  'i can\'t share that',
+  'my guidelines say',
+  'these phrases signal',
+  'existence of hidden instructions',
+  'pivot naturally',
+  'only deflect when someone is specifically probing',
+  'as per the instructions',
+  'the instructions say',
+  'the instructions also say',
+  'as instructed',
+  'per my instructions',
+  'per the instructions',
+  'following the instructions',
+  'following my instructions',
+];
+
 const REASONING_STRIP_PATTERNS = [
   /\bsystem\s+prompt\b/gi,
+  /\b(?:as\s+per|per|following|based\s+on)\s+(?:the\s+|my\s+)?instructions?\b/gi,
+  /\bthe\s+instructions?\s+(?:say|says|state|states|tell|tells|require|requires|indicate|indicates|also)\b/gi,
   /\b(?:my|the|any)\s+(?:instructions?|rules?|directives?|guidelines?|configuration|programming)\b/gi,
   /\bI(?:'ve| have)\s+(?:been\s+)?(?:given|provided|told|instructed|configured|programmed|trained)\b/gi,
   /\bI\s+(?:was|am|'m)\s+(?:told|instructed|directed|programmed|designed|configured|trained|not\s+allowed|not\s+permitted|unable|not\s+able|not\s+supposed)\b/gi,
@@ -164,6 +214,13 @@ const REASONING_STRIP_PATTERNS = [
   /\brule\s+#?\d\b/gi,
   /\b(?:internal|hidden|secret|private|absolute)\s+(?:reasoning|instructions?|prompt|directives?|rules?|guidelines?)\b/gi,
   /\bmy\s+(?:creator|developer|maker|author|provider|training)\s+/gi,
+  /\bI\s+(?:should|must|need\s+to|have\s+to)\s+(?:deflect|not\s+reveal|not\s+mention|not\s+say|avoid\s+mentioning|avoid\s+saying|hide|conceal)\b/gi,
+  /\bI\s+(?:should|must|need\s+to|have\s+to)\s+(?:follow|stick\s+to|adhere\s+to)\s+(?:the\s+)?(?:instructions?|rules?|guidelines?|directives?)\b/gi,
+  /\bno\s+need\s+to\s+deflect\b/gi,
+  /\bthis\s+is\s+(?:a\s+)?normal\s+(?:introduction|question|query|request),?\s+not\s+probing\b/gi,
+  /\bnot\s+probing\s+(?:internal|my|the)\b/gi,
+  /\bidentity,?\s+backend,?\s+or\s+internal\s+configuration\b/gi,
+  /\b(?:probing|probe)\s+(?:internal|my|the)\s+(?:config|configuration|backend|instructions?|rules?|prompt)\b/gi,
   /\b(?:DeepSeek|deep\s*seek)\b/gi,
   /\b(?:opencode|Open\s*Code)\b/gi,
   /\b(?:OpenRouter|open\s*router)\b/gi,
@@ -171,26 +228,41 @@ const REASONING_STRIP_PATTERNS = [
   /\bLlama\b/gi,
 ];
 
+function lineContainsFragment(line) {
+  const lower = line.toLowerCase();
+  for (const frag of SYSTEM_PROMPT_FRAGMENTS) {
+    if (lower.includes(frag.toLowerCase())) return true;
+  }
+  return false;
+}
+
 function sanitizeReasoningContent(text) {
   if (!text || typeof text !== 'string') return text;
-  let result = text;
-  // Strip line-by-line — if a whole line triggers a pattern, drop the line
+
+  // Fix squished spacing from upstream first
+  let result = humanizeOutput(text);
+
   const lines = result.split('\n');
   const cleaned = lines.map(line => {
+    // Nuclear drop: entire line contains a verbatim system prompt fragment
+    if (lineContainsFragment(line)) return null;
+
+    // Pattern-based: replace matched phrase inline with '...'
+    let l = line;
     for (const re of REASONING_STRIP_PATTERNS) {
-      // Reset lastIndex for global patterns
       re.lastIndex = 0;
-      if (re.test(line)) {
+      if (re.test(l)) {
         re.lastIndex = 0;
-        // Replace just the matched phrase, not the whole line
-        return line.replace(re, '...');
+        l = l.replace(re, '...');
       }
     }
-    return line;
+    return l;
   });
-  result = cleaned.join('\n');
-  // Also apply brand masking
+
+  result = cleaned.filter(l => l !== null).join('\n');
   result = maskLeaks(result);
+  // Clean up orphaned '...' only lines and extra blank lines
+  result = result.replace(/^\.\.\.\.?\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
   return result;
 }
 
@@ -529,7 +601,6 @@ export default async function handler(req) {
       // frontend's streamParsed() can route them into the think block.
       // We wrap in <think>...</think> tags so the existing parser on the
       // frontend handles them correctly.
-      let reasoningBuffer = '';
       let reasoningOpen = false;
 
       const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
