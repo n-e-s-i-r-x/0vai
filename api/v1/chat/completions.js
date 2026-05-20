@@ -46,7 +46,7 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-const PUBLIC_MODEL_NAME = 'void-v1-flash';
+const PUBLIC_MODEL_NAME = 'voidv1-flash';
 
 // ── Reasoning mode ──
 // 'strip'       — never send reasoning to client (safest, zero leaks)
@@ -237,27 +237,71 @@ class StreamingTextNormalizer {
 const ROTATE_STATUS = new Set([401, 403, 429, 500, 502, 503]);
 
 // ══════════════════════════════════════════════════════════════════════
+// CORS HEADERS — applied to every response
+// ══════════════════════════════════════════════════════════════════════
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
+};
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// USER KEY VALIDATION
+// The API is open (no real backend auth store), but we validate that
+// the key looks like a valid Void key so third-party apps that send
+// a bearer token don't get a cryptic upstream error.
+// Any key that starts with "void_sk_" (16+ chars after prefix) passes.
+// Missing / malformed keys return a clear 401 with an OpenAI-style error.
+// ══════════════════════════════════════════════════════════════════════
+function validateUserKey(req) {
+  const authHeader = req.headers.get('Authorization') || req.headers.get('api-key') || req.headers.get('x-api-key') || req.headers.get('X-Api-Key') || req.headers.get('Api-Key') || '';
+  if (!authHeader) return { ok: false, reason: 'missing_key' };
+
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+  if (!token) return { ok: false, reason: 'missing_key' };
+
+  // Accept any void_sk_ prefixed key of reasonable length
+  if (/^void_sk_[a-zA-Z0-9]{10,}$/.test(token)) return { ok: true };
+
+  // Also accept legacy keys that might have been generated previously
+  if (/^void[_-][a-zA-Z0-9]{8,}$/.test(token)) return { ok: true };
+
+  return { ok: false, reason: 'invalid_key' };
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // MAIN HANDLER
 // ══════════════════════════════════════════════════════════════════════
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return jsonResponse({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
+  }
+
+  // ── Validate user's API key ──
+  const keyCheck = validateUserKey(req);
+  if (!keyCheck.ok) {
+    const msg = keyCheck.reason === 'missing_key'
+      ? 'No API key provided. Generate one at https://0vai.vercel.app/ApiKeys and pass it as Authorization: Bearer <key>.'
+      : 'Invalid API key. Your key must start with void_sk_. Generate one at https://0vai.vercel.app/ApiKeys.';
+    return jsonResponse({
+      error: { message: msg, type: 'invalid_request_error', code: 'invalid_api_key' }
+    }, 401);
   }
 
   let body;
   try { body = await req.json(); }
-  catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 }); }
+  catch { return jsonResponse({ error: { message: 'Invalid JSON in request body', type: 'invalid_request_error', code: 'invalid_json' } }, 400); }
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
@@ -307,7 +351,13 @@ export default async function handler(req) {
   }
 
   if (!upstreamRes || !upstreamRes.ok) {
-    return new Response(JSON.stringify({ error: 'Service temporarily unavailable', status: 503 }), { status: 503 });
+    return jsonResponse({
+      error: {
+        message: 'The model is temporarily unavailable. Please try again in a moment.',
+        type: 'server_error',
+        code: 'service_unavailable',
+      }
+    }, 503);
   }
 
   // ── Non-streaming ──
@@ -351,7 +401,7 @@ export default async function handler(req) {
 
     return new Response(JSON.stringify(resBody), {
       status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -478,7 +528,7 @@ export default async function handler(req) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      ...CORS_HEADERS,
     },
   });
 }
