@@ -2,8 +2,8 @@ export const config = { runtime: 'edge' };
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
 };
 
 const REASONING_EFFORT_LEVELS = ['default', 'low', 'medium', 'high', 'extrahigh', 'max'];
@@ -12,7 +12,7 @@ export default function handler(req) {
   if (req.method === 'OPTIONS')
     return new Response(null, { status: 204, headers: CORS_HEADERS });
 
-  if (req.method !== 'GET')
+  if (req.method !== 'GET' && req.method !== 'POST')
     return new Response(
       JSON.stringify({ error: { message: 'Method not allowed', type: 'api_error', code: 405 } }),
       { status: 405, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
