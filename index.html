@@ -4555,6 +4555,19 @@ function closeOwnerPage(){
 let _akKey='';
 function openApiKey(){
   if(typeof closeSidebar==='function')closeSidebar();
+  // Restore saved key from localStorage
+  try{
+    const saved=localStorage.getItem('void_api_key');
+    if(saved&&saved.startsWith('void_sk_')){
+      _akKey=saved;
+      const el=document.getElementById('ak-key-value');
+      if(el)el.textContent=saved;
+      const el2=document.getElementById('ak-ext-key-value');
+      if(el2){el2.textContent=saved;el2.dataset.code=saved;}
+      const btn=document.getElementById('ak-gen-btn');
+      if(btn)btn.textContent='Regenerate API Key';
+    }
+  }catch(e){}
   const ov=document.getElementById('api-key-ov');
   ov.classList.add('show');
   requestAnimationFrame(()=>ov.classList.add('visible'));
@@ -4579,13 +4592,14 @@ function generateApiKey(){
   setTimeout(()=>{
     const chars='abcdefghijklmnopqrstuvwxyz0123456789';
     let key='void_sk_';
-    for(let i=0;i<17;i++)key+=chars[Math.floor(Math.random()*chars.length)];
+    for(let i=0;i<24;i++)key+=chars[Math.floor(Math.random()*chars.length)];
     _akKey=key;
+    try{localStorage.setItem('void_api_key',key);}catch(e){}
     const el=document.getElementById('ak-key-value');
     if(el)el.textContent=key;
     const el2=document.getElementById('ak-ext-key-value');
     if(el2){el2.textContent=key;el2.dataset.code=key;}
-    if(btn){btn.disabled=false;btn.textContent='Generate API Key';}
+    if(btn){btn.disabled=false;btn.textContent='Regenerate API Key';}
     showAkToast('API key generated');
   },600);
 }
