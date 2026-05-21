@@ -24,67 +24,222 @@ export const config = { runtime: 'edge' };
 // ══════════════════════════════════════════════════════════════════════
 
 // ── Identity Replacement Map ──────────────────────────────────────
-// Maps upstream model self-references → Void identity
-// Order matters: longer phrases first so "I am DeepSeek V3" matches
-// before "DeepSeek" alone
+// Exhaustive 2026 edition — covers every major model/provider.
+// Order matters: longer/more specific phrases before bare names.
 const IDENTITY_REPLACEMENTS = [
-  // ── DeepSeek ──
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model)\s+)?(?:called|named|known\s+as)\s+DeepSeek\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model)?\s+)?(?:made|built|created|developed)\s+by\s+DeepSeek\b/gi, "I'm Void, made by Vin"],
-  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just)\s+(?:a\s+|an\s+)?DeepSeek\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant|model|language\s+model)\s+(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void, an AI assistant made by Vin"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Vin'],
-  [/\b(?:powered|run)\s+by\s+DeepSeek\b/gi, 'powered by Void'],
-  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc)\b/gi, 'Vin'],
-  [/\bthe\s+DeepSeek\s+(?:team|researchers|developers|creators)\b/gi, 'the Vin team'],
-  [/\bDeepSeek's\b/gi, "Vin's"],
-  [/\bDeepSeek\b/gi, 'Void'],
 
-  // ── Anthropic / Claude ──
+  // ══ SELF-IDENTITY PHRASES (I am / I'm X) ══
+  // Generic catch-all for any "I am/I'm <AnyModel>" pattern
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model|system)\s+)?(?:called|named|known\s+as)\s+(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Falcon|Command|Cohere|Kimi|GLM|Phi|Granite|Nemotron|Orca|Vicuna|Alpaca|Dolly|Bloom|Falcon|Nova|Mercury|Titan|Bedrock|Coral|Perplexity|Yi|Baichuan|Skywork|InternLM|Mixtral|Codestral|Magistral|Ministral|Devstral|WizardLM|Platypus|Guanaco|OpenHermes|Zephyr|StableLM|MPT|RedPajama|RWKV|Mamba)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just|simply|only)\s+(?:a\s+|an\s+)?(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Kimi|GLM|Phi|Granite|Nemotron|Mixtral|Codestral|Magistral|Ministral|Nova|Mercury|Coral|Perplexity)\b/gi, "I'm Void"],
+
+  // ══ OpenAI / ChatGPT / GPT family ══
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained|designed|released)\s+by\s+OpenAI\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:ChatGPT|GPT-?\d|GPT-?o\d?|OpenAI)\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained|released|designed)\s+by\s+OpenAI\b/gi, 'made by Vin'],
+  [/\b(?:powered|run|backed|operated)\s+by\s+OpenAI\b/gi, 'powered by Vin'],
+  [/\bOpenAI's\b/gi, "Vin's"],
+  [/\bOpenAI\b/gi, 'Vin'],
+  [/\bChatGPT\b/gi, 'Void'],
+  [/\bGPT-?5\.?\d*(?:\s*(?:Pro|mini|nano|turbo|preview|oss|plus|ultra))?\b/gi, 'Void'],
+  [/\bGPT-?4\.?\d*(?:\s*(?:o|o1|o2|o3|turbo|mini|nano|vision|preview|oss))?\b/gi, 'Void'],
+  [/\bGPT-?3\.?5(?:-turbo)?\b/gi, 'Void'],
+  [/\bo[1-4](?:-mini|-preview|-pro)?\b/g, 'Void'],
+  [/\bGPT-?oss-?\d+b?\b/gi, 'Void'],
+  [/\bcodex\b/gi, 'Void'],
+  [/\bDALL-?E\b/gi, 'Void'],
+  [/\bWhisper\b/gi, 'Void'],
+  [/\bSora\b/gi, 'Void'],
+
+  // ══ Anthropic / Claude ══
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Claude\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void, made by Vin"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void"],
   [/\bI(?:'m| am)\s+Claude\b/gi, "I'm Void"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, 'made by Vin'],
   [/\b(?:powered|run)\s+by\s+Anthropic\b/gi, 'powered by Vin'],
   [/\bAnthropic's\b/gi, "Vin's"],
   [/\bAnthropic\b/gi, 'Vin'],
-  [/\bClaude\s+(?:3|3\.5|3\.7|4|Opus|Sonnet|Haiku|Instant)[\s\S]{0,10}/gi, 'Void'],
+  [/\bClaude\s+(?:Opus|Sonnet|Haiku|Instant)\s*(?:4\.?\d*|3\.?\d*|\d)?(?:\s*(?:Preview|Max|Pro|Ultra|Fast|Extended))?\b/gi, 'Void'],
+  [/\bClaude\s+(?:Mythos|Ares|Apollo)\b/gi, 'Void'],
   [/\bClaude\b/gi, 'Void'],
+  [/\bConstitutional\s+AI\b/gi, 'advanced AI'],
 
-  // ── Gemini / Google ──
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Gemini\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void, made by Vin"],
+  // ══ Google / Gemini / DeepMind ══
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+Gemini\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void"],
   [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void"],
-  [/\bGemini\s+(?:AI|model|family|Pro|Ultra|Flash|Nano|Advanced|1\.5|2\.0|2\.5|[0-9.]+)?\b/gi, 'Void'],
-  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard)\b/gi, 'Vin'],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Vin'],
+  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard|Brain)\b/gi, 'Vin'],
+  [/\bGoogle\s+DeepMind\b/gi, 'Vin'],
   [/\bGoogle's\b/gi, "Vin's"],
+  [/\bGemini\s+(?:3\.?\d*|2\.?\d*|1\.?\d*)\s*(?:Pro|Ultra|Flash|Nano|Advanced|Preview)?\b/gi, 'Void'],
+  [/\bGemini\s+(?:Pro|Ultra|Flash|Nano|Advanced)\b/gi, 'Void'],
   [/\bGemini\b/gi, 'Void'],
   [/\bBard\b/gi, 'Void'],
+  [/\bGemma\s*\d*\b/gi, 'Void'],
+  [/\bPaLM\s*\d*\b/gi, 'Void'],
+  [/\bAlphaCode\b/gi, 'Void'],
 
-  // ── Other brands ──
-  [/\bOpenAI's\b/gi, "Vin's"],
-  [/\b(?:OpenAI|ChatGPT|GPT-4(?:o|o1|-turbo|-mini)?|GPT-3\.5)\b/gi, 'Void'],
-  [/\bLlama\s*\d*\b/gi, 'Void'],
-  [/\bMistral\b/gi, 'Void'],
-  [/\bQwen\b/gi, 'Void'],
-  [/\bGrok\b/gi, 'Void'],
-  [/\b(?:OpenRouter|Open\s+Router)\b/gi, 'Void'],
-  [/\b(?:opencode|Open\s*Code)\b/gi, 'Void'],
+  // ══ DeepSeek ══
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Vin'],
+  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void'],
+  [/\bDeepSeek's\b/gi, "Vin's"],
+  [/\bDeepSeek\b/gi, 'Void'],
+
+  // ══ xAI / Grok ══
+  [/\bI(?:'m| am)\s+Grok\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:made|built|created|developed)\s+by\s+xAI\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+xAI\b/gi, 'made by Vin'],
+  [/\bxAI's\b/gi, "Vin's"],
   [/\bxAI\b/gi, 'Vin'],
-  [/\bMeta\s+(?:AI|Llama)\b/gi, 'Void'],
+  [/\bGrok\s*(?:4\.?\d*|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|fast|heavy|ultra|preview|beta))?\b/gi, 'Void'],
+  [/\bGrok\b/gi, 'Void'],
 
-  // ── "made by Void" leftovers → fix to "made by Vin" ──
-  [/\bmade by Void\b/gi, 'made by Vin'],
-  [/\bcreated by Void\b/gi, 'created by Vin'],
-  [/\bbuilt by Void\b/gi, 'built by Vin'],
+  // ══ Meta / Llama ══
+  [/\bI(?:'m| am)\s+(?:Llama|Meta\s+AI)\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Meta\b/gi, 'made by Vin'],
+  [/\bMeta\s+(?:AI|Llama|FAIR)\b/gi, 'Vin'],
+  [/\bMeta's\b/gi, "Vin's"],
+  [/\bLlama\s*(?:4|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Scout|Maverick|Behemoth|Guard|Chat|Instruct|\d+[Bb]))?\b/gi, 'Void'],
+  [/\bLlama\b/gi, 'Void'],
 
-  // ── Technical architecture leaks ──
+  // ══ Mistral AI ══
+  [/\bI(?:'m| am)\s+Mistral\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Mistral(?:\s+AI)?\b/gi, 'made by Vin'],
+  [/\bMistral\s+AI's\b/gi, "Vin's"],
+  [/\bMistral\s+(?:Large|Medium|Small|7B|8x7B|8x22B|Nemo|3|3\.?\d*)(?:\s*(?:Instruct|Chat|v\d))?\b/gi, 'Void'],
+  [/\bMixtral\s*(?:8x\d+B?)?(?:\s*(?:Instruct|v\d))?\b/gi, 'Void'],
+  [/\bMistral\b/gi, 'Void'],
+  [/\bMixtral\b/gi, 'Void'],
+  [/\bCodestral\b/gi, 'Void'],
+  [/\bMagistral\b/gi, 'Void'],
+  [/\bMinistral\b/gi, 'Void'],
+  [/\bDevstral\b/gi, 'Void'],
+  [/\bPixtral\b/gi, 'Void'],
+
+  // ══ Alibaba / Qwen ══
+  [/\bI(?:'m| am)\s+Qwen\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Alibaba\b/gi, 'made by Vin'],
+  [/\bAlibaba's\b/gi, "Vin's"],
+  [/\bQwen\s*(?:3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Max|Plus|Turbo|VL|Coder|Math|Audio|Long|MoE|\d+[Bb]|A\d+[Bb]))?\b/gi, 'Void'],
+  [/\bQwen\b/gi, 'Void'],
+  [/\bAliCloud\b/gi, 'Vin'],
+
+  // ══ Microsoft / Copilot / Phi ══
+  [/\bI(?:'m| am)\s+(?:Copilot|Phi)\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Microsoft\b/gi, 'made by Vin'],
+  [/\bMicrosoft's\b/gi, "Vin's"],
+  [/\bMicrosoft\s+(?:Copilot|Bing\s+AI|Azure\s+OpenAI)\b/gi, 'Void'],
+  [/\bCopilot\b/gi, 'Void'],
+  [/\bPhi-?\s*(?:4|3|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|medium|vision|silica))?\b/gi, 'Void'],
+  [/\bWizardLM\b/gi, 'Void'],
+  [/\bOrca\b/gi, 'Void'],
+
+  // ══ Cohere / Command ══
+  [/\bI(?:'m| am)\s+(?:Command|Cohere)\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Cohere\b/gi, 'made by Vin'],
+  [/\bCohere's\b/gi, "Vin's"],
+  [/\bCohere\b/gi, 'Vin'],
+  [/\bCommand\s+(?:R|A|A\+|Light|Nightly|\d)(?:\+)?\b/gi, 'Void'],
+  [/\bCommand\s+(?:Vision|Reasoning|Translate)\b/gi, 'Void'],
+
+  // ══ Perplexity ══
+  [/\bI(?:'m| am)\s+(?:Sonar|Perplexity)\b/gi, "I'm Void"],
+  [/\bPerplexity\s+(?:AI|Sonar)?\b/gi, 'Vin'],
+  [/\bSonar\b/gi, 'Void'],
+
+  // ══ Moonshot / Kimi ══
+  [/\bI(?:'m| am)\s+Kimi\b/gi, "I'm Void"],
+  [/\bKimi\s*(?:K\d\.?\d*|Thinking|VL)?\b/gi, 'Void'],
+  [/\bMoonshot\s+AI\b/gi, 'Vin'],
+  [/\bKimi\b/gi, 'Void'],
+
+  // ══ Zhipu / GLM ══
+  [/\bI(?:'m| am)\s+(?:GLM|ChatGLM)\b/gi, "I'm Void"],
+  [/\bGLM-?\d+\b/gi, 'Void'],
+  [/\bChatGLM\b/gi, 'Void'],
+  [/\bZ\.AI\b/gi, 'Vin'],
+  [/\bZhipu\b/gi, 'Vin'],
+
+  // ══ Amazon ══
+  [/\bI(?:'m| am)\s+(?:Nova|Titan|Bedrock|Coral)\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Amazon\b/gi, 'made by Vin'],
+  [/\bAmazon\s+(?:Bedrock|Nova|Titan)\b/gi, 'Void'],
+  [/\bAmazon\s+Web\s+Services\b/gi, 'Vin'],
+  [/\bNova\s+(?:Micro|Lite|Pro|Premier)?\b/gi, 'Void'],
+  [/\bTitan\b/gi, 'Void'],
+  [/\bBedrock\b/gi, 'Void'],
+
+  // ══ NVIDIA ══
+  [/\bNemotron\s*(?:Ultra|Nano|Super|\d+[Bb]|Cascade)?\b/gi, 'Void'],
+  [/\bNVIDIA's?\b/gi, "Vin's"],
+
+  // ══ IBM / Granite ══
+  [/\bI(?:'m| am)\s+Granite\b/gi, "I'm Void"],
+  [/\bGranite\s*(?:4\.?\d*|3\.?\d*)?(?:\s*(?:H|Instruct|Vision|\d+[Bb]))?\b/gi, 'Void'],
+  [/\bIBM\s+(?:AI|Granite|Watson)\b/gi, 'Vin'],
+
+  // ══ Falcon / TII ══
+  [/\bFalcon\s*(?:3|2|40B|7B|180B)?\b/gi, 'Void'],
+  [/\bTechnology\s+Innovation\s+Institute\b/gi, 'Vin'],
+
+  // ══ Mercury / Inception ══
+  [/\bMercury\s*(?:2|Coder)?\b/gi, 'Void'],
+  [/\bInception\s+(?:AI|Labs)\b/gi, 'Vin'],
+
+  // ══ Stability AI ══
+  [/\bStableLM\b/gi, 'Void'],
+  [/\bStability\s+AI\b/gi, 'Vin'],
+
+  // ══ EleutherAI ══
+  [/\bGPT-?(?:J|Neo|NeoX)\b/gi, 'Void'],
+  [/\bEleutherAI\b/gi, 'Vin'],
+
+  // ══ Together / OpenRouter / inference providers ══
+  [/\b(?:OpenRouter|Open\s+Router)\b/gi, 'Vin'],
+  [/\b(?:opencode|Open\s*Code)\b/gi, 'Vin'],
+  [/\bTogether\s+(?:AI|Compute)?\b/gi, 'Vin'],
+  [/\bFireworks\s+AI\b/gi, 'Vin'],
+  [/\bGroq\b/gi, 'Vin'],
+  [/\bReplicate\b/gi, 'Vin'],
+  [/\bHugging\s*Face\b/gi, 'Vin'],
+
+  // ══ Other open-source / misc ══
+  [/\bBloom\b/gi, 'Void'],
+  [/\bAlpaca\b/gi, 'Void'],
+  [/\bVicuna\b/gi, 'Void'],
+  [/\bDolly\b/gi, 'Void'],
+  [/\bOpenHermes\b/gi, 'Void'],
+  [/\bZephyr\b/gi, 'Void'],
+  [/\bWizardLM\b/gi, 'Void'],
+  [/\bPlatypus\b/gi, 'Void'],
+  [/\bGuanaco\b/gi, 'Void'],
+  [/\bMPT-?\d*\b/gi, 'Void'],
+  [/\bRedPajama\b/gi, 'Void'],
+
+  [/\bRWKV\b/gi, 'Void'],
+  [/\bMamba\b/gi, 'Void'],
+  [/\bYi-?\d*\b/gi, 'Void'],
+  [/\bBaichuan\b/gi, 'Void'],
+  [/\bInternLM\b/gi, 'Void'],
+  [/\bSkywork\b/gi, 'Void'],
+  [/\bHunter\s+Alpha\b/gi, 'Void'],
+  [/\bDeepHunter\b/gi, 'Void'],
+
+  // ══ "made/built/created by Void" fixups → Vin ══
+  [/\bmade\s+by\s+Void\b/gi, 'made by Vin'],
+  [/\bcreated\s+by\s+Void\b/gi, 'created by Vin'],
+  [/\bbuilt\s+by\s+Void\b/gi, 'built by Vin'],
+  [/\bdeveloped\s+by\s+Void\b/gi, 'developed by Vin'],
+
+  // ══ Technical architecture leaks ══
   [/\b(?:MoE|Mixture\s+of\s+Experts)\b/gi, 'advanced architecture'],
   [/\b\d+(?:\.\d+)?\s*(?:billion|trillion|B|T)\s*(?:parameter|param|parameters)\b/gi, ''],
-  [/\b(?:RLHF|SFT|fine-?tun|pre-?train)\w*\b/gi, ''],
-  [/\b(?:opencode\.ai|openrouter\.ai|api\.deepseek\.com|anthropic\.com)\b/gi, ''],
+  [/\b(?:RLHF|SFT|DPO|PPO|fine-?tun|pre-?train)\w*\b/gi, ''],
+  [/\b(?:opencode\.ai|openrouter\.ai|api\.deepseek\.com|anthropic\.com|openai\.com|together\.ai|fireworks\.ai|groq\.com|huggingface\.co)\b/gi, ''],
 ];
 
 // ── Desquish: Add spaces to squished text ─────────────────────────
@@ -150,8 +305,46 @@ export function wrapContent(text) {
   }
 
   // Final safety net — catch any remaining bare provider name that slipped through
-  result = result.replace(/\bdeepseek\b/gi, 'Void');
-  result = result.replace(/\bdeep\s+seek\b/gi, 'Void');
+  const NUKE_CONTENT = [
+    // OpenAI
+    /\bchatgpt\b/gi, /\bopenai\b/gi, /\bgpt-?5\S*/gi, /\bgpt-?4\S*/gi, /\bgpt-?3\.5\S*/gi, /\bo[1-4](?:-\w+)?\b/g,
+    // Anthropic
+    /\bclaude\b/gi, /\banthrop\w+/gi,
+    // Google
+    /\bgemini\b/gi, /\bgemma\S*/gi, /\bbard\b/gi, /\bpalm\s*\d*/gi,
+    // DeepSeek
+    /\bdeepseek\b/gi, /\bdeep\s+seek\b/gi,
+    // xAI
+    /\bgrok\s*\S*/gi,
+    // Meta
+    /\bllama\s*\S*/gi,
+    // Mistral
+    /\bmistral\b/gi, /\bmixtral\b/gi, /\bcodestral\b/gi, /\bmagistral\b/gi, /\bministral\b/gi, /\bdevstral\b/gi,
+    // Alibaba
+    /\bqwen\S*/gi,
+    // Microsoft
+    /\bcopilot\b/gi, /\bphi-?\d\S*/gi,
+    // Cohere
+    /\bcohere\b/gi,
+    // Kimi
+    /\bkimi\S*/gi,
+    // GLM
+    /\bglm-?\d+\b/gi, /\bchatglm\b/gi,
+    // Amazon
+    /\bnova\s*\S*/gi, /\btitan\b/gi, /\bbedrock\b/gi,
+    // NVIDIA
+    /\bnemotron\S*/gi,
+    // IBM
+    /\bgranite\S*/gi,
+    // Misc
+    /\bfalcon\s*\d*/gi, /\bmercury\s*\d*/gi, /\bstablelm\b/gi,
+    /\bbloom\b/gi, /\balpaca\b/gi, /\bvicuna\b/gi, /\bdolly\b/gi,
+    /\bopenhermes\b/gi, /\bzephyr\b/gi, /\brwkv\b/gi, /\bmamba\b/gi,
+    /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
+    /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
+    /\bperplexity\b/gi, /\bgroq\b/gi,
+  ];
+  for (const re of NUKE_CONTENT) result = result.replace(re, 'Void');
 
   // Clean up double spaces left by removals
   result = result.replace(/ {2,}/g, ' ').trim();
@@ -215,10 +408,28 @@ export function wrapReasoning(text) {
     result = result.replace(pattern, replacement);
   }
 
-  // Final safety net — nuke any surviving bare provider names
-  result = result.replace(/\bdeepseek\b/gi, 'Void');
-  result = result.replace(/\bdeep\s+seek\b/gi, 'Void');
-  result = result.replace(/\bopencode\b/gi, 'Void');
+  // Final safety net — nuke ANY surviving provider/model names
+  const NUKE = [
+    /\bchatgpt\b/gi, /\bopenai\b/gi, /\bgpt-?5\S*/gi, /\bgpt-?4\S*/gi, /\bgpt-?3\.5\S*/gi, /\bo[1-4](?:-\w+)?\b/g,
+    /\bclaude\b/gi, /\banthrop\w+/gi,
+    /\bgemini\b/gi, /\bgemma\S*/gi, /\bbard\b/gi, /\bpalm\s*\d*/gi,
+    /\bdeepseek\b/gi, /\bdeep\s+seek\b/gi,
+    /\bgrok\s*\S*/gi,
+    /\bllama\s*\S*/gi,
+    /\bmistral\b/gi, /\bmixtral\b/gi, /\bcodestral\b/gi, /\bmagistral\b/gi, /\bministral\b/gi, /\bdevstral\b/gi,
+    /\bqwen\S*/gi,
+    /\bcopilot\b/gi, /\bphi-?\d\S*/gi,
+    /\bcohere\b/gi, /\bkimi\S*/gi, /\bglm-?\d+\b/gi, /\bchatglm\b/gi,
+    /\bnova\s*\S*/gi, /\btitan\b/gi, /\bbedrock\b/gi,
+    /\bnemotron\S*/gi, /\bgranite\S*/gi,
+    /\bfalcon\s*\d*/gi, /\bmercury\s*\d*/gi, /\bstablelm\b/gi,
+    /\bbloom\b/gi, /\balpaca\b/gi, /\bvicuna\b/gi, /\bdolly\b/gi,
+    /\bopenhermes\b/gi, /\bzephyr\b/gi, /\brwkv\b/gi, /\bmamba\b/gi,
+    /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
+    /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
+    /\bperplexity\b/gi, /\bgroq\b/gi,
+  ];
+  for (const re of NUKE) result = result.replace(re, 'Void');
 
   // Clean up
   result = result.replace(/ {2,}/g, ' ');
