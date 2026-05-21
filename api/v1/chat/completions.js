@@ -55,15 +55,11 @@ const REASONING_MODE = 'passthrough';
 
 // ══════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT
-// KEY CHANGE: NO identity. NO rules. NO "don't reveal" instructions.
-// The model is told NOTHING about being Void. It will say "I'm
-// DeepSeek" and we replace that on the backend. This prevents the
-// model from ever reasoning about identity rules in its thinking.
-//
-// We only keep style/formatting instructions that don't reference
-// identity at all.
+// Simple identity injection — the model knows it's Void V1 Flash.
+// The reasoning leak handler already strips any system prompt
+// references from reasoning output, so this is safe.
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `Be helpful, warm, and direct. Write with proper spacing between all words and sentences. Always put a space after punctuation like periods, commas, and colons. Use clear, well-structured responses.`;
+const SYSTEM_PROMPT = `You are Void V1 Flash, an AI assistant. Your name is Void V1 Flash. If asked who you are or what model you are, always say you are Void V1 Flash. Be helpful, warm, and direct. Write with proper spacing between all words and sentences. Always put a space after punctuation like periods, commas, and colons. Use clear, well-structured responses.`;
 
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD — Still needed to block prompt-injection attacks
