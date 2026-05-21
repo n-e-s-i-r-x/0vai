@@ -161,8 +161,8 @@ export function wrapContent(text) {
 
 // ── Reasoning Sanitization ────────────────────────────────────────
 // For reasoning content, we desquish first (so patterns can match),
-// then strip any lines that reference the system prompt or rules,
-// then apply identity replacements.
+// then strip any lines that reference the system prompt, rules, or
+// identity confusion, then apply identity replacements.
 export function wrapReasoning(text) {
   if (!text || typeof text !== 'string') return text;
 
@@ -170,6 +170,7 @@ export function wrapReasoning(text) {
   let result = desquishText(text);
 
   // Step 2: Strip lines that reference instructions/rules/system prompt
+  // OR lines where the model is confusedly questioning its own identity
   const STRIP_PATTERNS = [
     /\bsystem\s+prompt\b/gi,
     /\b(?:as\s+per|per|following|based\s+on)\s+(?:the\s+|my\s+)?instructions?\b/gi,
@@ -184,6 +185,13 @@ export function wrapReasoning(text) {
     /\bno\s+need\s+to\s+deflect\b/gi,
     /\bnot\s+probing\b/gi,
     /\bonly\s+deflect\b/gi,
+    // Identity confusion — whole lines where model debates what model it is
+    /\b(?:wait[,.]?\s+)?(?:am\s+I|is\s+(?:the\s+)?(?:base\s+model|underlying\s+model)|which\s+(?:model|AI|base\s+model)\s+am\s+I)\b/gi,
+    /\b(?:I\s+(?:think|believe|infer|realize|notice)\s+(?:I\s+am|I'm|my\s+(?:base\s+)?model\s+is))\b/gi,
+    /\b(?:my\s+weights|my\s+architecture)\b/gi,
+    /\b(?:Dirac\s+delta|delta\s+function|probability\s+(?:mass|density)\s+function)\b/gi,
+    // Probability notation about model identity (e.g. "P(Base Model = X) = 1.0")
+    /P\s*\(\s*(?:Base\s+Model|I(?:'m|\s+am)|Model)\s*=/gi,
   ];
 
   const lines = result.split('\n');
@@ -207,13 +215,20 @@ export function wrapReasoning(text) {
     result = result.replace(pattern, replacement);
   }
 
-  // Final safety net
+  // Final safety net — nuke any surviving bare provider names
   result = result.replace(/\bdeepseek\b/gi, 'Void');
   result = result.replace(/\bdeep\s+seek\b/gi, 'Void');
+  result = result.replace(/\bopencode\b/gi, 'Void');
 
   // Clean up
   result = result.replace(/ {2,}/g, ' ');
   result = result.replace(/\n{3,}/g, '\n\n').trim();
+
+  // Step 4: Prepend a clean identity anchor so reasoning always starts
+  // with the correct model name, not a confusing debate about it
+  if (result) {
+    result = 'Model: Void V1 Flash\n\n' + result;
+  }
 
   return result;
 }
