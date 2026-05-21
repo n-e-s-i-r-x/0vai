@@ -46,7 +46,7 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-const PUBLIC_MODEL_NAME = 'void-v1-flash';
+const PUBLIC_MODEL_NAME = 'voidv1-flash';
 
 // ── Reasoning mode ──
 // 'strip'       — never send reasoning to client (safest, zero leaks)
@@ -55,10 +55,14 @@ const REASONING_MODE = 'passthrough';
 
 // ══════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT
-// Simple identity injection — the model knows it's Void V1 Flash.
-// The reasoning leak handler already strips any system prompt
-// references from reasoning output, so this is safe.
+// Minimal formatting prompt only — NO identity info here.
+// Identity ("I'm Void") is applied 100% in post-processing by
+// void-wrapper.js (the Drumstick method). Putting identity in the
+// system prompt causes the model to reason about it in <think> blocks
+// which leaks. So we leave identity out entirely and just enforce
+// response quality / format here.
 // ══════════════════════════════════════════════════════════════════════
+const SYSTEM_PROMPT = `Write in short paragraphs. Use markdown for any answer longer than 3 sentences: ## headings, - bullets for 3+ items, numbered lists for steps. Wrap all code/commands/JSON in fenced code blocks with a language tag. Never use em dashes (—). Do not pad responses with restatements or filler closers.`;
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD — Still needed to block prompt-injection attacks
 // ══════════════════════════════════════════════════════════════════════
@@ -271,8 +275,12 @@ export default async function handler(req) {
   // ── Build upstream request ──
   // NO identity in the system prompt. The model will say "I'm DeepSeek"
   // and we replace it on the backend.
+  // IMPORTANT: always use the fixed upstream model ID regardless of
+  // what the client sends — passing client model names (e.g. "voidv1-flash")
+  // to the upstream API causes an invalid model error.
+  const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
-    model: model || 'deepseek-v4-flash-free',
+    model: UPSTREAM_MODEL,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       ...filterInputMessages(messages || []).filter(m => m.role !== 'system'),
