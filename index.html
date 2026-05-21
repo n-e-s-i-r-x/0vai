@@ -3023,7 +3023,7 @@ function looksLikeImageRequest(t){
   return IMAGE_INTENT.some(r=>r.test(t));
 }
 
-async function doSearch(q){try{const r=await fetch('/api/search.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});if(!r.ok)return null;const d=await r.json();return(d.results?.length||d.answer)?d:null;}catch(e){return null;}}
+async function doSearch(q){try{const r=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});if(!r.ok)return null;const d=await r.json();return(d.results?.length||d.answer)?d:null;}catch(e){return null;}}
 function buildSearchCtx(sd){if(!sd)return'';let c='\n\nRelevant web information:\n';if(sd.answer)c+='Summary: '+sd.answer+'\n';(sd.results||[]).forEach(r=>{let host='';try{host=new URL(r.url).hostname.replace('www.','');}catch(e){host='';}c+='- '+r.title+(host?' ('+host+')':'')+': '+r.snippet+'\n';});return c;}
 
 /* ─── STATE ─── */
@@ -3192,7 +3192,7 @@ async function runHumanizer(userText,aiId){
   const dynMax=Math.min(64000,Math.max(8000,Math.ceil(toHumanize.length/2)));
 
   try{
-    const res=await fetch('/api/chat.js',{
+    const res=await fetch('/api/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -3528,7 +3528,7 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
     ? 'on'
     : (S.settings.webSearchAuto===false ? 'off' : 'auto');
   const requestThink = typeof modeOn==='function'&&modeOn('think');
-  try{res=await fetch('/api/chat.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs,context:extraCtx,temperature:S.settings.turboMode?0.1:mDef.temp,maxTokens:S.settings.longOutput?20000:(maxTok||8000),model:effectiveModel,contMode:!!contMode,useSearch:!!useSearch,webSearch:webSearchMode,think:requestThink}),signal:abortSignal});}
+  try{res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs,context:extraCtx,temperature:S.settings.turboMode?0.1:mDef.temp,maxTokens:S.settings.longOutput?20000:(maxTok||8000),model:effectiveModel,contMode:!!contMode,useSearch:!!useSearch,webSearch:webSearchMode,think:requestThink}),signal:abortSignal});}
   catch(e){if(e.name!=='AbortError')throw e;return;}
   if(!res.ok)throw new Error('HTTP '+res.status);
   const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
@@ -3946,7 +3946,7 @@ async function generateImage(aiId,prompt,convo){
   try{
     S.busy=true;
     const txtEl=document.getElementById(aiId+'txt');
-    const r=await fetch('/api/image.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     if(txtEl){const aw=txtEl.querySelector('.activity-wrap,.vv-reply-loading,.answer-waiting,.loading');if(aw)aw.remove();}
     let content='_(Image generation failed)_';
     if(r.ok){const d=await r.json();if(d.url)content='![Generated Image]('+d.url+')';}
@@ -4236,7 +4236,7 @@ function modelCaps(){return CAPS[S.model]||CAPS['0'];}
    You only need to set hasReasoning/hasPromptedThink in chat.js MODEL_MAP — nothing else. */
 (async function fetchThinkCaps(){
   try{
-    const res=await fetch('/api/chat.js');
+    const res=await fetch('/api/chat');
     if(!res.ok)return;
     const data=await res.json();
     for(const key of Object.keys(data)){
