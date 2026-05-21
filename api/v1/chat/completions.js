@@ -19,7 +19,7 @@ export const config = { runtime: 'edge' };
 // The identity is applied 100% in post-processing, not in the prompt.
 // ══════════════════════════════════════════════════════════════════════
 
-import { wrapContent, wrapReasoning, wrapFullResponse, wrapChunk, desquishText } from './void-wrapper.js';
+import { wrapContent, wrapReasoning, wrapFullResponse, wrapChunk } from './void-wrapper.js';
 
 const OPENCODE_API_KEYS = [
   'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
@@ -191,43 +191,9 @@ class ThinkTagParser {
 // STREAMING TEXT NORMALIZER — Fixes squished words across chunks
 // ══════════════════════════════════════════════════════════════════════
 class StreamingTextNormalizer {
-  constructor() {
-    this.tail = '';
-    this.minBuffer = 10;
-    this.pending = '';
-  }
-
-  feed(chunk) {
-    if (!chunk || typeof chunk !== 'string') return '';
-    const combined = this.tail + chunk;
-    const fixed = desquishText(combined);
-
-    if (fixed.length < this.minBuffer) {
-      this.pending += fixed;
-      if (this.pending.length >= this.minBuffer) {
-        const toEmit = this.pending;
-        this.pending = '';
-        const splitAt = Math.max(0, toEmit.length - 3);
-        this.tail = toEmit.slice(splitAt);
-        return toEmit.slice(0, splitAt);
-      }
-      this.tail = '';
-      return '';
-    }
-
-    const splitAt = Math.max(0, fixed.length - 3);
-    this.tail = fixed.slice(splitAt);
-    const toEmit = this.pending + fixed.slice(0, splitAt);
-    this.pending = '';
-    return toEmit;
-  }
-
-  flush() {
-    const result = this.pending + this.tail;
-    this.pending = '';
-    this.tail = '';
-    return result;
-  }
+  constructor() {}
+  feed(chunk) { return chunk || ''; }
+  flush() { return ''; }
 }
 
 const ROTATE_STATUS = new Set([401, 403, 429, 500, 502, 503]);
