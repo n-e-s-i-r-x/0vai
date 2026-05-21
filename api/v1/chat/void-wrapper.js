@@ -242,59 +242,6 @@ const IDENTITY_REPLACEMENTS = [
   [/\b(?:opencode\.ai|openrouter\.ai|api\.deepseek\.com|anthropic\.com|openai\.com|together\.ai|fireworks\.ai|groq\.com|huggingface\.co)\b/gi, ''],
 ];
 
-// ── Desquish: Add spaces to squished text ─────────────────────────
-export function desquishText(text) {
-  if (!text || typeof text !== 'string') return text;
-
-  // Split on code blocks and only desquish prose segments
-  const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-  const processed = parts.map((part, i) => {
-    // Odd indices are code blocks — leave them untouched
-    if (i % 2 === 1) return part;
-
-    let r = part;
-
-    // Sentence-ending punctuation followed by any letter (no space)
-    r = r.replace(/([.!?])([A-Za-z])/g, '$1 $2');
-
-    // Comma/colon/semicolon followed by letter
-    r = r.replace(/([,;:])([A-Za-z])/g, '$1 $2');
-
-    // Closing paren/bracket followed by letter
-    r = r.replace(/([)}\]])([A-Za-z])/g, '$1 $2');
-
-    // Letter followed by opening paren/bracket
-    r = r.replace(/([A-Za-z])([({\[])/g, '$1 $2');
-
-    // Digit-letter boundary
-    r = r.replace(/(\d)([A-Za-z])/g, '$1 $2');
-    r = r.replace(/([A-Za-z])(\d)/g, '$1 $2');
-
-    // camelCase boundaries: lowercase→Uppercase
-    r = r.replace(/([a-z])([A-Z])/g, '$1 $2');
-
-  // Common squished word patterns (lowercase→lowercase missing space)
-  // These are high-confidence word boundaries that appear squished
-  const SQUISH_PAIRS = [
-    // articles / prepositions glued to words
-    [/\b(is|are|was|were|am)(a|an|the|my|your|our|their|its|this|that|not|now|also|very|so|too|just|here|there|where|when|how|what|which|who)\b/gi, '$1 $2'],
-    [/\b(model|base|my|the|your|this|that|and|but|for|with|from|into|onto|upon|about|above|below|after|before|during|within|without)(is|are|was|were|has|have|had|will|would|can|could|should|must|may|might)\b/gi, '$1 $2'],
-    [/\b(I|i)(am|was|can|will|have|had|know|think|believe|understand|need|want|use|work|run|am)\b/g, '$1 $2'],
-    // common suffix-prefix collisions
-    [/\b(language|base|reasoning|architecture|training|system|assistant|probability|identity|distribution|deployment|instance|model|family|version|specific|current|actual|fixed|certain|complete|entire)(model|is|are|was|has|have|the|a|an|of|for|by|on|in|to|and|or|not|my|its|this|that|with|from|mass|over)\b/gi, '$1 $2'],
-  ];
-
-  for (const [re, replacement] of SQUISH_PAIRS) {
-    r = r.replace(re, replacement);
-  }
-
-    // Collapse multiple spaces
-    r = r.replace(/ {2,}/g, ' ');
-    return r;
-  });
-
-  return processed.join('');
-}
 
 // ── Content Wrapping ──────────────────────────────────────────────
 // Replace all identity references in the model's response content.
@@ -305,8 +252,6 @@ export function wrapContent(text) {
 
   let result = text;
 
-  // First desquish (in case content is also squished)
-  result = desquishText(result);
 
   // Apply all identity replacements
   for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
@@ -368,8 +313,7 @@ export function wrapContent(text) {
 export function wrapReasoning(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Step 1: Desquish so patterns can actually match
-  let result = desquishText(text);
+  let result = text;
 
   // Step 2: Strip lines that reference instructions/rules/system prompt
   // OR lines where the model is confusedly questioning its own identity
