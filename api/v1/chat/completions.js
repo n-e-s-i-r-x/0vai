@@ -420,6 +420,8 @@ export default async function handler(req) {
       const textNormalizer = new StreamingTextNormalizer();
       // Accumulate full reasoning for batch desquishing + wrapping
       let reasoningAccumulator = '';
+      // Accumulate full content for a final safety-net wrap pass
+      let contentAccumulator = '';
 
       const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
       const makeChunk = (id, created, delta, finishReason) => ({
@@ -446,23 +448,26 @@ export default async function handler(req) {
 
             const raw = trimmed.slice(5).trim();
             if (raw === '[DONE]') {
-              // If we accumulated reasoning in strip mode, emit a
-              // sanitized summary instead of raw reasoning
+              // Flush text normalizer tail
+              const normalizerTail = textNormalizer.flush();
+              if (normalizerTail) contentAccumulator += normalizerTail;
+
+              // Emit full wrapped content as one chunk (catches all identity leaks)
+              if (contentAccumulator.trim()) {
+                const wrapped = wrapContent(contentAccumulator);
+                if (wrapped.trim()) {
+                  emit(makeChunk(`chatcmpl-${Date.now()}`, null, { content: wrapped }, null));
+                }
+                contentAccumulator = '';
+              }
+
+              // Emit wrapped reasoning
               if (reasoningAccumulator && REASONING_MODE === 'passthrough') {
                 const wrapped = wrapReasoning(reasoningAccumulator);
                 if (wrapped.trim()) {
                   emit(makeChunk(`chatcmpl-${Date.now()}`, null, { reasoning_content: wrapped }, null));
                 }
                 reasoningAccumulator = '';
-              }
-
-              // Flush text normalizer
-              const normalizerTail = textNormalizer.flush();
-              if (normalizerTail) {
-                const wrapped = wrapContent(normalizerTail);
-                if (wrapped.trim()) {
-                  emit(makeChunk(`chatcmpl-${Date.now()}`, null, { content: wrapped }, null));
-                }
               }
 
               controller.enqueue(encoder.encode(SSE.done()));
@@ -505,11 +510,9 @@ export default async function handler(req) {
               const normalized = textNormalizer.feed(c);
               if (!normalized) continue;
 
-              // Wrap identity ("DeepSeek" → "Void")
-              const wrapped = wrapContent(normalized);
-              if (!wrapped) continue;
-
-              emit(makeChunk(parsed.id, parsed.created, { content: wrapped }, null));
+              // Accumulate — we wrap the full content at [DONE] so
+              // word-boundary splits across chunks can't break regex matches
+              contentAccumulator += normalized;
             }
           }
         }
