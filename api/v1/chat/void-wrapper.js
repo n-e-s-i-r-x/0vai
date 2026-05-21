@@ -41,6 +41,17 @@ const IDENTITY_REPLACEMENTS = [
   [/\bDeepSeek's\b/gi, "Void's"],
   [/\bDeepSeek\b/gi, 'Void'],
 
+  // Gemini / Google
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Gemini\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void, made by Void"],
+  [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void"],
+  [/\bGemini\s+(?:AI|model|family|Pro|Ultra|Flash|Nano|Advanced|1\.5|2\.0|2\.5|[0-9.]+)?\b/gi, 'Void'],
+  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard)\b/gi, 'Void'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Void'],
+  [/\bGoogle's\b/gi, "Void's"],
+  [/\bGemini\b/gi, 'Void'],
+  [/\bBard\b/gi, 'Void'],
+
   // Other brand names
   [/\b(?:OpenAI|ChatGPT|GPT-4(?:o|o1|-turbo|-mini)?)\b/gi, 'Void'],
   [/\bClaude\b/gi, 'Void'],
@@ -56,21 +67,12 @@ const IDENTITY_REPLACEMENTS = [
 ];
 
 // ── Desquish: Add spaces to squished text ─────────────────────────
-// DeepSeek v4 Flash sometimes returns reasoning_content with NO SPACES
-// between words. This function adds spaces at word boundaries so we
-// can then run pattern matching on readable text.
 export function desquishText(text) {
   if (!text || typeof text !== 'string') return text;
   let r = text;
 
-  // lowercase immediately followed by uppercase (camelCase boundary)
-  r = r.replace(/([a-z])([A-Z][a-z])/g, '$1 $2');
-
-  // lowercase followed by uppercase then lowercase (word boundary)
-  r = r.replace(/([a-z])([A-Z][A-Z])/g, '$1 $2');
-
-  // Sentence-ending punctuation followed by uppercase
-  r = r.replace(/([.!?])([A-Z])/g, '$1 $2');
+  // Sentence-ending punctuation followed by any letter (no space)
+  r = r.replace(/([.!?])([A-Za-z])/g, '$1 $2');
 
   // Comma/colon/semicolon followed by letter
   r = r.replace(/([,;:])([A-Za-z])/g, '$1 $2');
@@ -84,6 +86,24 @@ export function desquishText(text) {
   // Digit-letter boundary
   r = r.replace(/(\d)([A-Za-z])/g, '$1 $2');
   r = r.replace(/([A-Za-z])(\d)/g, '$1 $2');
+
+  // camelCase boundaries: lowercase→Uppercase
+  r = r.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+  // Common squished word patterns (lowercase→lowercase missing space)
+  // These are high-confidence word boundaries that appear squished
+  const SQUISH_PAIRS = [
+    // articles / prepositions glued to words
+    [/\b(is|are|was|were|am)(a|an|the|my|your|our|their|its|this|that|not|now|also|very|so|too|just|here|there|where|when|how|what|which|who)\b/gi, '$1 $2'],
+    [/\b(model|base|my|the|your|this|that|and|but|for|with|from|into|onto|upon|about|above|below|after|before|during|within|without)(is|are|was|were|has|have|had|will|would|can|could|should|must|may|might)\b/gi, '$1 $2'],
+    [/\b(I|i)(am|was|can|will|have|had|know|think|believe|understand|need|want|use|work|run|am)\b/g, '$1 $2'],
+    // common suffix-prefix collisions
+    [/\b(language|base|reasoning|architecture|training|system|assistant|probability|identity|distribution|deployment|instance|model|family|version|specific|current|actual|fixed|certain|complete|entire)(model|is|are|was|has|have|the|a|an|of|for|by|on|in|to|and|or|not|my|its|this|that|with|from|mass|over)\b/gi, '$1 $2'],
+  ];
+
+  for (const [re, replacement] of SQUISH_PAIRS) {
+    r = r.replace(re, replacement);
+  }
 
   // Collapse multiple spaces
   r = r.replace(/ {2,}/g, ' ');
