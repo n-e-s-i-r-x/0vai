@@ -149,6 +149,10 @@ export function wrapContent(text) {
     result = result.replace(pattern, replacement);
   }
 
+  // Final safety net — catch any remaining bare provider name that slipped through
+  result = result.replace(/\bdeepseek\b/gi, 'Void');
+  result = result.replace(/\bdeep\s+seek\b/gi, 'Void');
+
   // Clean up double spaces left by removals
   result = result.replace(/ {2,}/g, ' ').trim();
 
@@ -202,6 +206,10 @@ export function wrapReasoning(text) {
   for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
     result = result.replace(pattern, replacement);
   }
+
+  // Final safety net
+  result = result.replace(/\bdeepseek\b/gi, 'Void');
+  result = result.replace(/\bdeep\s+seek\b/gi, 'Void');
 
   // Clean up
   result = result.replace(/ {2,}/g, ' ');
