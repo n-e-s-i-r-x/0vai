@@ -245,26 +245,33 @@ const IDENTITY_REPLACEMENTS = [
 // ── Desquish: Add spaces to squished text ─────────────────────────
 export function desquishText(text) {
   if (!text || typeof text !== 'string') return text;
-  let r = text;
 
-  // Sentence-ending punctuation followed by any letter (no space)
-  r = r.replace(/([.!?])([A-Za-z])/g, '$1 $2');
+  // Split on code blocks and only desquish prose segments
+  const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
+  const processed = parts.map((part, i) => {
+    // Odd indices are code blocks — leave them untouched
+    if (i % 2 === 1) return part;
 
-  // Comma/colon/semicolon followed by letter
-  r = r.replace(/([,;:])([A-Za-z])/g, '$1 $2');
+    let r = part;
 
-  // Closing paren/bracket followed by letter
-  r = r.replace(/([)}\]])([A-Za-z])/g, '$1 $2');
+    // Sentence-ending punctuation followed by any letter (no space)
+    r = r.replace(/([.!?])([A-Za-z])/g, '$1 $2');
 
-  // Letter followed by opening paren/bracket
-  r = r.replace(/([A-Za-z])([({\[])/g, '$1 $2');
+    // Comma/colon/semicolon followed by letter
+    r = r.replace(/([,;:])([A-Za-z])/g, '$1 $2');
 
-  // Digit-letter boundary
-  r = r.replace(/(\d)([A-Za-z])/g, '$1 $2');
-  r = r.replace(/([A-Za-z])(\d)/g, '$1 $2');
+    // Closing paren/bracket followed by letter
+    r = r.replace(/([)}\]])([A-Za-z])/g, '$1 $2');
 
-  // camelCase boundaries: lowercase→Uppercase
-  r = r.replace(/([a-z])([A-Z])/g, '$1 $2');
+    // Letter followed by opening paren/bracket
+    r = r.replace(/([A-Za-z])([({\[])/g, '$1 $2');
+
+    // Digit-letter boundary
+    r = r.replace(/(\d)([A-Za-z])/g, '$1 $2');
+    r = r.replace(/([A-Za-z])(\d)/g, '$1 $2');
+
+    // camelCase boundaries: lowercase→Uppercase
+    r = r.replace(/([a-z])([A-Z])/g, '$1 $2');
 
   // Common squished word patterns (lowercase→lowercase missing space)
   // These are high-confidence word boundaries that appear squished
@@ -281,10 +288,12 @@ export function desquishText(text) {
     r = r.replace(re, replacement);
   }
 
-  // Collapse multiple spaces
-  r = r.replace(/ {2,}/g, ' ');
+    // Collapse multiple spaces
+    r = r.replace(/ {2,}/g, ' ');
+    return r;
+  });
 
-  return r;
+  return processed.join('');
 }
 
 // ── Content Wrapping ──────────────────────────────────────────────
