@@ -46,7 +46,7 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-const PUBLIC_MODEL_NAME = 'voidv1-flash';
+const PUBLIC_MODEL_NAME = 'void-v1-flash';
 
 // ── Reasoning mode ──
 // 'strip'       — never send reasoning to client (safest, zero leaks)
@@ -423,6 +423,7 @@ export default async function handler(req) {
       // Accumulate full content for a final safety-net wrap pass
       let contentAccumulator = '';
 
+      let doneSent = false;
       const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
       const makeChunk = (id, created, delta, finishReason) => ({
         id: sanitizeId(id) || `chatcmpl-${Date.now()}`,
@@ -471,6 +472,7 @@ export default async function handler(req) {
               }
 
               controller.enqueue(encoder.encode(SSE.done()));
+              doneSent = true;
               continue;
             }
 
@@ -519,7 +521,7 @@ export default async function handler(req) {
       } catch (e) {
         // Stream error
       } finally {
-        controller.enqueue(encoder.encode(SSE.done()));
+        if (!doneSent) controller.enqueue(encoder.encode(SSE.done()));
         try { controller.close(); } catch (_) {}
       }
     },
