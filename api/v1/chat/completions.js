@@ -59,8 +59,6 @@ const REASONING_MODE = 'passthrough';
 // The reasoning leak handler already strips any system prompt
 // references from reasoning output, so this is safe.
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `You are Void V1 Flash. Be helpful, warm, and direct.`;
-
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD — Still needed to block prompt-injection attacks
 // ══════════════════════════════════════════════════════════════════════
