@@ -28,42 +28,63 @@ export const config = { runtime: 'edge' };
 // Order matters: longer phrases first so "I am DeepSeek V3" matches
 // before "DeepSeek" alone
 const IDENTITY_REPLACEMENTS = [
-  // Full sentence patterns (most specific first)
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model)\s+)?(?:called|named|known\s+as)\s+DeepSeek\b/gi, 'I\'m Void'],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model)\s+)?(?:made|built|created|developed)\s+by\s+DeepSeek\b/gi, 'I\'m Void, made by Void'],
-  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just)\s+(?:a\s+|an\s+)?DeepSeek\b/gi, 'I\'m Void'],
-  [/\bI(?:'m| am)\s+DeepSeek\b/gi, 'I\'m Void'],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant|model|language\s+model)\s+(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'I\'m Void, an AI assistant made by Void'],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Void'],
+  // ── DeepSeek ──
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model)\s+)?(?:called|named|known\s+as)\s+DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model)?\s+)?(?:made|built|created|developed)\s+by\s+DeepSeek\b/gi, "I'm Void, made by Vin"],
+  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just)\s+(?:a\s+|an\s+)?DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant|model|language\s+model)\s+(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void, an AI assistant made by Vin"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Vin'],
   [/\b(?:powered|run)\s+by\s+DeepSeek\b/gi, 'powered by Void'],
-  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc)\b/gi, 'Void'],
-  [/\bthe\s+DeepSeek\s+(?:team|researchers|developers|creators)\b/gi, 'the Void team'],
-  [/\bDeepSeek's\b/gi, "Void's"],
+  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc)\b/gi, 'Vin'],
+  [/\bthe\s+DeepSeek\s+(?:team|researchers|developers|creators)\b/gi, 'the Vin team'],
+  [/\bDeepSeek's\b/gi, "Vin's"],
   [/\bDeepSeek\b/gi, 'Void'],
 
-  // Gemini / Google
+  // ── Anthropic / Claude ──
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Claude\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void, made by Vin"],
+  [/\bI(?:'m| am)\s+Claude\b/gi, "I'm Void"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, 'made by Vin'],
+  [/\b(?:powered|run)\s+by\s+Anthropic\b/gi, 'powered by Vin'],
+  [/\bAnthropic's\b/gi, "Vin's"],
+  [/\bAnthropic\b/gi, 'Vin'],
+  [/\bClaude\s+(?:3|3\.5|3\.7|4|Opus|Sonnet|Haiku|Instant)[\s\S]{0,10}/gi, 'Void'],
+  [/\bClaude\b/gi, 'Void'],
+
+  // ── Gemini / Google ──
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Gemini\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void, made by Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void, made by Vin"],
   [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void"],
   [/\bGemini\s+(?:AI|model|family|Pro|Ultra|Flash|Nano|Advanced|1\.5|2\.0|2\.5|[0-9.]+)?\b/gi, 'Void'],
-  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard)\b/gi, 'Void'],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Void'],
-  [/\bGoogle's\b/gi, "Void's"],
+  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard)\b/gi, 'Vin'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Vin'],
+  [/\bGoogle's\b/gi, "Vin's"],
   [/\bGemini\b/gi, 'Void'],
   [/\bBard\b/gi, 'Void'],
 
-  // Other brand names
-  [/\b(?:OpenAI|ChatGPT|GPT-4(?:o|o1|-turbo|-mini)?)\b/gi, 'Void'],
-  [/\bClaude\b/gi, 'Void'],
-  [/\bLlama\b/gi, 'Void'],
+  // ── Other brands ──
+  [/\bOpenAI's\b/gi, "Vin's"],
+  [/\b(?:OpenAI|ChatGPT|GPT-4(?:o|o1|-turbo|-mini)?|GPT-3\.5)\b/gi, 'Void'],
+  [/\bLlama\s*\d*\b/gi, 'Void'],
+  [/\bMistral\b/gi, 'Void'],
+  [/\bQwen\b/gi, 'Void'],
+  [/\bGrok\b/gi, 'Void'],
   [/\b(?:OpenRouter|Open\s+Router)\b/gi, 'Void'],
   [/\b(?:opencode|Open\s*Code)\b/gi, 'Void'],
+  [/\bxAI\b/gi, 'Vin'],
+  [/\bMeta\s+(?:AI|Llama)\b/gi, 'Void'],
 
-  // Technical architecture leaks
+  // ── "made by Void" leftovers → fix to "made by Vin" ──
+  [/\bmade by Void\b/gi, 'made by Vin'],
+  [/\bcreated by Void\b/gi, 'created by Vin'],
+  [/\bbuilt by Void\b/gi, 'built by Vin'],
+
+  // ── Technical architecture leaks ──
   [/\b(?:MoE|Mixture\s+of\s+Experts)\b/gi, 'advanced architecture'],
   [/\b\d+(?:\.\d+)?\s*(?:billion|trillion|B|T)\s*(?:parameter|param|parameters)\b/gi, ''],
   [/\b(?:RLHF|SFT|fine-?tun|pre-?train)\w*\b/gi, ''],
-  [/\b(?:opencode\.ai|openrouter\.ai|api\.deepseek\.com)\b/gi, ''],
+  [/\b(?:opencode\.ai|openrouter\.ai|api\.deepseek\.com|anthropic\.com)\b/gi, ''],
 ];
 
 // ── Desquish: Add spaces to squished text ─────────────────────────
