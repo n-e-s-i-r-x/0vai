@@ -51,7 +51,7 @@ const PUBLIC_MODEL_NAME = 'voidv1-flash';
 // ── Reasoning mode ──
 // 'strip'       — never send reasoning to client (safest, zero leaks)
 // 'passthrough' — sanitize reasoning and send it (may still have edge cases)
-const REASONING_MODE = 'strip';
+const REASONING_MODE = 'passthrough';
 
 // ══════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT
