@@ -59,7 +59,7 @@ const REASONING_MODE = 'passthrough';
 // The reasoning leak handler already strips any system prompt
 // references from reasoning output, so this is safe.
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `You are Void V1 Flash, an AI assistant. Your name is Void V1 Flash. If asked who you are or what model you are, always say you are Void V1 Flash. Be helpful, warm, and direct. Write with proper spacing between all words and sentences. Always put a space after punctuation like periods, commas, and colons. Use clear, well-structured responses.`;
+const SYSTEM_PROMPT = `You are Void V1 Flash. Be helpful, warm, and direct.`;
 
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD — Still needed to block prompt-injection attacks
