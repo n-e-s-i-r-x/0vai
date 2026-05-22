@@ -15,12 +15,13 @@ export const config = { runtime: 'edge' };
 //   1. DON'T tell the model it's Void in the system prompt
 //   2. Let the model be whatever it is (DeepSeek, etc.)
 //   3. After the response comes back, REPLACE all identity references
-//      on the backend: "DeepSeek" → "Void", "I'm DeepSeek" → "I'm Void"
+//      on the backend: "DeepSeek" → "Void V1 Flash", "I'm DeepSeek" → "I'm Void V1 Flash"
 //   4. STRIP reasoning entirely (reasoning is where 99% of leaks live)
 //   5. The model never "knows" it's Void — we just make it LOOK like
 //      Void to the end user
 //
 // This is 100% backend. No prompt engineering. No fighting the model.
+// "Void" is always displayed as "Void V1 Flash" to the end user.
 // ══════════════════════════════════════════════════════════════════════
 
 // ── Identity Replacement Map ──────────────────────────────────────
@@ -30,172 +31,172 @@ const IDENTITY_REPLACEMENTS = [
 
   // ══ SELF-IDENTITY PHRASES (I am / I'm X) ══
   // Generic catch-all for any "I am/I'm <AnyModel>" pattern
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model|system)\s+)?(?:called|named|known\s+as)\s+(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Falcon|Command|Cohere|Kimi|GLM|Phi|Granite|Nemotron|Orca|Vicuna|Alpaca|Dolly|Bloom|Falcon|Nova|Mercury|Titan|Bedrock|Coral|Perplexity|Yi|Baichuan|Skywork|InternLM|Mixtral|Codestral|Magistral|Ministral|Devstral|WizardLM|Platypus|Guanaco|OpenHermes|Zephyr|StableLM|MPT|RedPajama|RWKV|Mamba)\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just|simply|only)\s+(?:a\s+|an\s+)?(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Kimi|GLM|Phi|Granite|Nemotron|Mixtral|Codestral|Magistral|Ministral|Nova|Mercury|Coral|Perplexity)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+(?:assistant|model|language\s+model|system)\s+)?(?:called|named|known\s+as)\s+(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Falcon|Command|Cohere|Kimi|GLM|Phi|Granite|Nemotron|Orca|Vicuna|Alpaca|Dolly|Bloom|Falcon|Nova|Mercury|Titan|Bedrock|Coral|Perplexity|Yi|Baichuan|Skywork|InternLM|Mixtral|Codestral|Magistral|Ministral|Devstral|WizardLM|Platypus|Guanaco|OpenHermes|Zephyr|StableLM|MPT|RedPajama|RWKV|Mamba)\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:actually|really|truly|basically|essentially|just|simply|only)\s+(?:a\s+|an\s+)?(?:DeepSeek|ChatGPT|GPT|Claude|Gemini|Grok|Llama|Mistral|Qwen|Copilot|Bard|Gemma|Kimi|GLM|Phi|Granite|Nemotron|Mixtral|Codestral|Magistral|Ministral|Nova|Mercury|Coral|Perplexity)\b/gi, "I'm Void V1 Flash"],
 
   // ══ OpenAI / ChatGPT / GPT family ══
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained|designed|released)\s+by\s+OpenAI\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:ChatGPT|GPT-?\d|GPT-?o\d?|OpenAI)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained|designed|released)\s+by\s+OpenAI\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:ChatGPT|GPT-?\d|GPT-?o\d?|OpenAI)\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained|released|designed)\s+by\s+OpenAI\b/gi, 'made by Vin'],
   [/\b(?:powered|run|backed|operated)\s+by\s+OpenAI\b/gi, 'powered by Vin'],
   [/\bOpenAI's\b/gi, "Vin's"],
   [/\bOpenAI\b/gi, 'Vin'],
-  [/\bChatGPT\b/gi, 'Void'],
-  [/\bGPT-?5\.?\d*(?:\s*(?:Pro|mini|nano|turbo|preview|oss|plus|ultra))?\b/gi, 'Void'],
-  [/\bGPT-?4\.?\d*(?:\s*(?:o|o1|o2|o3|turbo|mini|nano|vision|preview|oss))?\b/gi, 'Void'],
-  [/\bGPT-?3\.?5(?:-turbo)?\b/gi, 'Void'],
-  [/\bo[1-4](?:-mini|-preview|-pro)?\b/g, 'Void'],
-  [/\bGPT-?oss-?\d+b?\b/gi, 'Void'],
-  [/\bcodex\b/gi, 'Void'],
-  [/\bDALL-?E\b/gi, 'Void'],
-  [/\bWhisper\b/gi, 'Void'],
-  [/\bSora\b/gi, 'Void'],
+  [/\bChatGPT\b/gi, 'Void V1 Flash'],
+  [/\bGPT-?5\.?\d*(?:\s*(?:Pro|mini|nano|turbo|preview|oss|plus|ultra))?\b/gi, 'Void V1 Flash'],
+  [/\bGPT-?4\.?\d*(?:\s*(?:o|o1|o2|o3|turbo|mini|nano|vision|preview|oss))?\b/gi, 'Void V1 Flash'],
+  [/\bGPT-?3\.?5(?:-turbo)?\b/gi, 'Void V1 Flash'],
+  [/\bo[1-4](?:-mini|-preview|-pro)?\b/g, 'Void V1 Flash'],
+  [/\bGPT-?oss-?\d+b?\b/gi, 'Void V1 Flash'],
+  [/\bcodex\b/gi, 'Void V1 Flash'],
+  [/\bDALL-?E\b/gi, 'Void V1 Flash'],
+  [/\bWhisper\b/gi, 'Void V1 Flash'],
+  [/\bSora\b/gi, 'Void V1 Flash'],
 
   // ══ Anthropic / Claude ══
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Claude\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+Claude\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Claude\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+Claude\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, 'made by Vin'],
   [/\b(?:powered|run)\s+by\s+Anthropic\b/gi, 'powered by Vin'],
   [/\bAnthropic's\b/gi, "Vin's"],
   [/\bAnthropic\b/gi, 'Vin'],
-  [/\bClaude\s+(?:Opus|Sonnet|Haiku|Instant)\s*(?:4\.?\d*|3\.?\d*|\d)?(?:\s*(?:Preview|Max|Pro|Ultra|Fast|Extended))?\b/gi, 'Void'],
-  [/\bClaude\s+(?:Mythos|Ares|Apollo)\b/gi, 'Void'],
-  [/\bClaude\b/gi, 'Void'],
+  [/\bClaude\s+(?:Opus|Sonnet|Haiku|Instant)\s*(?:4\.?\d*|3\.?\d*|\d)?(?:\s*(?:Preview|Max|Pro|Ultra|Fast|Extended))?\b/gi, 'Void V1 Flash'],
+  [/\bClaude\s+(?:Mythos|Ares|Apollo)\b/gi, 'Void V1 Flash'],
+  [/\bClaude\b/gi, 'Void V1 Flash'],
   [/\bConstitutional\s+AI\b/gi, 'advanced AI'],
 
   // ══ Google / Gemini / DeepMind ══
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+Gemini\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+Gemini\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Vin'],
   [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard|Brain)\b/gi, 'Vin'],
   [/\bGoogle\s+DeepMind\b/gi, 'Vin'],
   [/\bGoogle's\b/gi, "Vin's"],
-  [/\bGemini\s+(?:3\.?\d*|2\.?\d*|1\.?\d*)\s*(?:Pro|Ultra|Flash|Nano|Advanced|Preview)?\b/gi, 'Void'],
-  [/\bGemini\s+(?:Pro|Ultra|Flash|Nano|Advanced)\b/gi, 'Void'],
-  [/\bGemini\b/gi, 'Void'],
-  [/\bBard\b/gi, 'Void'],
-  [/\bGemma\s*\d*\b/gi, 'Void'],
-  [/\bPaLM\s*\d*\b/gi, 'Void'],
-  [/\bAlphaCode\b/gi, 'Void'],
+  [/\bGemini\s+(?:3\.?\d*|2\.?\d*|1\.?\d*)\s*(?:Pro|Ultra|Flash|Nano|Advanced|Preview)?\b/gi, 'Void V1 Flash'],
+  [/\bGemini\s+(?:Pro|Ultra|Flash|Nano|Advanced)\b/gi, 'Void V1 Flash'],
+  [/\bGemini\b/gi, 'Void V1 Flash'],
+  [/\bBard\b/gi, 'Void V1 Flash'],
+  [/\bGemma\s*\d*\b/gi, 'Void V1 Flash'],
+  [/\bPaLM\s*\d*\b/gi, 'Void V1 Flash'],
+  [/\bAlphaCode\b/gi, 'Void V1 Flash'],
 
   // ══ DeepSeek ══
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+DeepSeek\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Vin'],
-  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void'],
+  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void V1 Flash'],
   [/\bDeepSeek's\b/gi, "Vin's"],
-  [/\bDeepSeek\b/gi, 'Void'],
+  [/\bDeepSeek\b/gi, 'Void V1 Flash'],
 
   // ══ xAI / Grok ══
-  [/\bI(?:'m| am)\s+Grok\b/gi, "I'm Void"],
-  [/\bI(?:'m| am)\s+(?:made|built|created|developed)\s+by\s+xAI\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+Grok\b/gi, "I'm Void V1 Flash"],
+  [/\bI(?:'m| am)\s+(?:made|built|created|developed)\s+by\s+xAI\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+xAI\b/gi, 'made by Vin'],
   [/\bxAI's\b/gi, "Vin's"],
   [/\bxAI\b/gi, 'Vin'],
-  [/\bGrok\s*(?:4\.?\d*|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|fast|heavy|ultra|preview|beta))?\b/gi, 'Void'],
-  [/\bGrok\b/gi, 'Void'],
+  [/\bGrok\s*(?:4\.?\d*|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|fast|heavy|ultra|preview|beta))?\b/gi, 'Void V1 Flash'],
+  [/\bGrok\b/gi, 'Void V1 Flash'],
 
   // ══ Meta / Llama ══
-  [/\bI(?:'m| am)\s+(?:Llama|Meta\s+AI)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:Llama|Meta\s+AI)\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Meta\b/gi, 'made by Vin'],
   [/\bMeta\s+(?:AI|Llama|FAIR)\b/gi, 'Vin'],
   [/\bMeta's\b/gi, "Vin's"],
-  [/\bLlama\s*(?:4|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Scout|Maverick|Behemoth|Guard|Chat|Instruct|\d+[Bb]))?\b/gi, 'Void'],
-  [/\bLlama\b/gi, 'Void'],
+  [/\bLlama\s*(?:4|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Scout|Maverick|Behemoth|Guard|Chat|Instruct|\d+[Bb]))?\b/gi, 'Void V1 Flash'],
+  [/\bLlama\b/gi, 'Void V1 Flash'],
 
   // ══ Mistral AI ══
-  [/\bI(?:'m| am)\s+Mistral\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+Mistral\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Mistral(?:\s+AI)?\b/gi, 'made by Vin'],
   [/\bMistral\s+AI's\b/gi, "Vin's"],
-  [/\bMistral\s+(?:Large|Medium|Small|7B|8x7B|8x22B|Nemo|3|3\.?\d*)(?:\s*(?:Instruct|Chat|v\d))?\b/gi, 'Void'],
-  [/\bMixtral\s*(?:8x\d+B?)?(?:\s*(?:Instruct|v\d))?\b/gi, 'Void'],
-  [/\bMistral\b/gi, 'Void'],
-  [/\bMixtral\b/gi, 'Void'],
-  [/\bCodestral\b/gi, 'Void'],
-  [/\bMagistral\b/gi, 'Void'],
-  [/\bMinistral\b/gi, 'Void'],
-  [/\bDevstral\b/gi, 'Void'],
-  [/\bPixtral\b/gi, 'Void'],
+  [/\bMistral\s+(?:Large|Medium|Small|7B|8x7B|8x22B|Nemo|3|3\.?\d*)(?:\s*(?:Instruct|Chat|v\d))?\b/gi, 'Void V1 Flash'],
+  [/\bMixtral\s*(?:8x\d+B?)?(?:\s*(?:Instruct|v\d))?\b/gi, 'Void V1 Flash'],
+  [/\bMistral\b/gi, 'Void V1 Flash'],
+  [/\bMixtral\b/gi, 'Void V1 Flash'],
+  [/\bCodestral\b/gi, 'Void V1 Flash'],
+  [/\bMagistral\b/gi, 'Void V1 Flash'],
+  [/\bMinistral\b/gi, 'Void V1 Flash'],
+  [/\bDevstral\b/gi, 'Void V1 Flash'],
+  [/\bPixtral\b/gi, 'Void V1 Flash'],
 
   // ══ Alibaba / Qwen ══
-  [/\bI(?:'m| am)\s+Qwen\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+Qwen\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Alibaba\b/gi, 'made by Vin'],
   [/\bAlibaba's\b/gi, "Vin's"],
-  [/\bQwen\s*(?:3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Max|Plus|Turbo|VL|Coder|Math|Audio|Long|MoE|\d+[Bb]|A\d+[Bb]))?\b/gi, 'Void'],
-  [/\bQwen\b/gi, 'Void'],
+  [/\bQwen\s*(?:3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Max|Plus|Turbo|VL|Coder|Math|Audio|Long|MoE|\d+[Bb]|A\d+[Bb]))?\b/gi, 'Void V1 Flash'],
+  [/\bQwen\b/gi, 'Void V1 Flash'],
   [/\bAliCloud\b/gi, 'Vin'],
 
   // ══ Microsoft / Copilot / Phi ══
-  [/\bI(?:'m| am)\s+(?:Copilot|Phi)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:Copilot|Phi)\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Microsoft\b/gi, 'made by Vin'],
   [/\bMicrosoft's\b/gi, "Vin's"],
-  [/\bMicrosoft\s+(?:Copilot|Bing\s+AI|Azure\s+OpenAI)\b/gi, 'Void'],
-  [/\bCopilot\b/gi, 'Void'],
-  [/\bPhi-?\s*(?:4|3|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|medium|vision|silica))?\b/gi, 'Void'],
-  [/\bWizardLM\b/gi, 'Void'],
-  [/\bOrca\b/gi, 'Void'],
+  [/\bMicrosoft\s+(?:Copilot|Bing\s+AI|Azure\s+OpenAI)\b/gi, 'Void V1 Flash'],
+  [/\bCopilot\b/gi, 'Void V1 Flash'],
+  [/\bPhi-?\s*(?:4|3|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|medium|vision|silica))?\b/gi, 'Void V1 Flash'],
+  [/\bWizardLM\b/gi, 'Void V1 Flash'],
+  [/\bOrca\b/gi, 'Void V1 Flash'],
 
   // ══ Cohere / Command ══
-  [/\bI(?:'m| am)\s+(?:Command|Cohere)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:Command|Cohere)\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Cohere\b/gi, 'made by Vin'],
   [/\bCohere's\b/gi, "Vin's"],
   [/\bCohere\b/gi, 'Vin'],
-  [/\bCommand\s+(?:R|A|A\+|Light|Nightly|\d)(?:\+)?\b/gi, 'Void'],
-  [/\bCommand\s+(?:Vision|Reasoning|Translate)\b/gi, 'Void'],
+  [/\bCommand\s+(?:R|A|A\+|Light|Nightly|\d)(?:\+)?\b/gi, 'Void V1 Flash'],
+  [/\bCommand\s+(?:Vision|Reasoning|Translate)\b/gi, 'Void V1 Flash'],
 
   // ══ Perplexity ══
-  [/\bI(?:'m| am)\s+(?:Sonar|Perplexity)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:Sonar|Perplexity)\b/gi, "I'm Void V1 Flash"],
   [/\bPerplexity\s+(?:AI|Sonar)?\b/gi, 'Vin'],
-  [/\bSonar\b/gi, 'Void'],
+  [/\bSonar\b/gi, 'Void V1 Flash'],
 
   // ══ Moonshot / Kimi ══
-  [/\bI(?:'m| am)\s+Kimi\b/gi, "I'm Void"],
-  [/\bKimi\s*(?:K\d\.?\d*|Thinking|VL)?\b/gi, 'Void'],
+  [/\bI(?:'m| am)\s+Kimi\b/gi, "I'm Void V1 Flash"],
+  [/\bKimi\s*(?:K\d\.?\d*|Thinking|VL)?\b/gi, 'Void V1 Flash'],
   [/\bMoonshot\s+AI\b/gi, 'Vin'],
-  [/\bKimi\b/gi, 'Void'],
+  [/\bKimi\b/gi, 'Void V1 Flash'],
 
   // ══ Zhipu / GLM ══
-  [/\bI(?:'m| am)\s+(?:GLM|ChatGLM)\b/gi, "I'm Void"],
-  [/\bGLM-?\d+\b/gi, 'Void'],
-  [/\bChatGLM\b/gi, 'Void'],
+  [/\bI(?:'m| am)\s+(?:GLM|ChatGLM)\b/gi, "I'm Void V1 Flash"],
+  [/\bGLM-?\d+\b/gi, 'Void V1 Flash'],
+  [/\bChatGLM\b/gi, 'Void V1 Flash'],
   [/\bZ\.AI\b/gi, 'Vin'],
   [/\bZhipu\b/gi, 'Vin'],
 
   // ══ Amazon ══
-  [/\bI(?:'m| am)\s+(?:Nova|Titan|Bedrock|Coral)\b/gi, "I'm Void"],
+  [/\bI(?:'m| am)\s+(?:Nova|Titan|Bedrock|Coral)\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+Amazon\b/gi, 'made by Vin'],
-  [/\bAmazon\s+(?:Bedrock|Nova|Titan)\b/gi, 'Void'],
+  [/\bAmazon\s+(?:Bedrock|Nova|Titan)\b/gi, 'Void V1 Flash'],
   [/\bAmazon\s+Web\s+Services\b/gi, 'Vin'],
-  [/\bNova\s+(?:Micro|Lite|Pro|Premier)?\b/gi, 'Void'],
-  [/\bTitan\b/gi, 'Void'],
-  [/\bBedrock\b/gi, 'Void'],
+  [/\bNova\s+(?:Micro|Lite|Pro|Premier)?\b/gi, 'Void V1 Flash'],
+  [/\bTitan\b/gi, 'Void V1 Flash'],
+  [/\bBedrock\b/gi, 'Void V1 Flash'],
 
   // ══ NVIDIA ══
-  [/\bNemotron\s*(?:Ultra|Nano|Super|\d+[Bb]|Cascade)?\b/gi, 'Void'],
+  [/\bNemotron\s*(?:Ultra|Nano|Super|\d+[Bb]|Cascade)?\b/gi, 'Void V1 Flash'],
   [/\bNVIDIA's?\b/gi, "Vin's"],
 
   // ══ IBM / Granite ══
-  [/\bI(?:'m| am)\s+Granite\b/gi, "I'm Void"],
-  [/\bGranite\s*(?:4\.?\d*|3\.?\d*)?(?:\s*(?:H|Instruct|Vision|\d+[Bb]))?\b/gi, 'Void'],
+  [/\bI(?:'m| am)\s+Granite\b/gi, "I'm Void V1 Flash"],
+  [/\bGranite\s*(?:4\.?\d*|3\.?\d*)?(?:\s*(?:H|Instruct|Vision|\d+[Bb]))?\b/gi, 'Void V1 Flash'],
   [/\bIBM\s+(?:AI|Granite|Watson)\b/gi, 'Vin'],
 
   // ══ Falcon / TII ══
-  [/\bFalcon\s*(?:3|2|40B|7B|180B)?\b/gi, 'Void'],
+  [/\bFalcon\s*(?:3|2|40B|7B|180B)?\b/gi, 'Void V1 Flash'],
   [/\bTechnology\s+Innovation\s+Institute\b/gi, 'Vin'],
 
   // ══ Mercury / Inception ══
-  [/\bMercury\s*(?:2|Coder)?\b/gi, 'Void'],
+  [/\bMercury\s*(?:2|Coder)?\b/gi, 'Void V1 Flash'],
   [/\bInception\s+(?:AI|Labs)\b/gi, 'Vin'],
 
   // ══ Stability AI ══
-  [/\bStableLM\b/gi, 'Void'],
+  [/\bStableLM\b/gi, 'Void V1 Flash'],
   [/\bStability\s+AI\b/gi, 'Vin'],
 
   // ══ EleutherAI ══
-  [/\bGPT-?(?:J|Neo|NeoX)\b/gi, 'Void'],
+  [/\bGPT-?(?:J|Neo|NeoX)\b/gi, 'Void V1 Flash'],
   [/\bEleutherAI\b/gi, 'Vin'],
 
   // ══ Together / OpenRouter / inference providers ══
@@ -208,28 +209,28 @@ const IDENTITY_REPLACEMENTS = [
   [/\bHugging\s*Face\b/gi, 'Vin'],
 
   // ══ Other open-source / misc ══
-  [/\bBloom\b/gi, 'Void'],
-  [/\bAlpaca\b/gi, 'Void'],
-  [/\bVicuna\b/gi, 'Void'],
-  [/\bDolly\b/gi, 'Void'],
-  [/\bOpenHermes\b/gi, 'Void'],
-  [/\bZephyr\b/gi, 'Void'],
-  [/\bWizardLM\b/gi, 'Void'],
-  [/\bPlatypus\b/gi, 'Void'],
-  [/\bGuanaco\b/gi, 'Void'],
-  [/\bMPT-?\d*\b/gi, 'Void'],
-  [/\bRedPajama\b/gi, 'Void'],
+  [/\bBloom\b/gi, 'Void V1 Flash'],
+  [/\bAlpaca\b/gi, 'Void V1 Flash'],
+  [/\bVicuna\b/gi, 'Void V1 Flash'],
+  [/\bDolly\b/gi, 'Void V1 Flash'],
+  [/\bOpenHermes\b/gi, 'Void V1 Flash'],
+  [/\bZephyr\b/gi, 'Void V1 Flash'],
+  [/\bWizardLM\b/gi, 'Void V1 Flash'],
+  [/\bPlatypus\b/gi, 'Void V1 Flash'],
+  [/\bGuanaco\b/gi, 'Void V1 Flash'],
+  [/\bMPT-?\d*\b/gi, 'Void V1 Flash'],
+  [/\bRedPajama\b/gi, 'Void V1 Flash'],
 
-  [/\bRWKV\b/gi, 'Void'],
-  [/\bMamba\b/gi, 'Void'],
-  [/\bYi-?\d*\b/gi, 'Void'],
-  [/\bBaichuan\b/gi, 'Void'],
-  [/\bInternLM\b/gi, 'Void'],
-  [/\bSkywork\b/gi, 'Void'],
-  [/\bHunter\s+Alpha\b/gi, 'Void'],
-  [/\bDeepHunter\b/gi, 'Void'],
+  [/\bRWKV\b/gi, 'Void V1 Flash'],
+  [/\bMamba\b/gi, 'Void V1 Flash'],
+  [/\bYi-?\d*\b/gi, 'Void V1 Flash'],
+  [/\bBaichuan\b/gi, 'Void V1 Flash'],
+  [/\bInternLM\b/gi, 'Void V1 Flash'],
+  [/\bSkywork\b/gi, 'Void V1 Flash'],
+  [/\bHunter\s+Alpha\b/gi, 'Void V1 Flash'],
+  [/\bDeepHunter\b/gi, 'Void V1 Flash'],
 
-  // ══ "made/built/created by Void" fixups → Vin ══
+  // ══ "made/built/created by Void V1 Flash" fixups → Vin ══
   [/\bmade\s+by\s+Void\b/gi, 'made by Vin'],
   [/\bcreated\s+by\s+Void\b/gi, 'created by Vin'],
   [/\bbuilt\s+by\s+Void\b/gi, 'built by Vin'],
@@ -246,7 +247,7 @@ const IDENTITY_REPLACEMENTS = [
 // ── Content Wrapping ──────────────────────────────────────────────
 // Replace all identity references in the model's response content.
 // This is the CORE of the Drumstick approach — the model says
-// "I'm DeepSeek" and we replace it with "I'm Void" on the backend.
+// "I'm DeepSeek" and we replace it with "I'm Void V1 Flash" on the backend.
 export function wrapContent(text) {
   if (!text || typeof text !== 'string') return text;
 
@@ -298,7 +299,7 @@ export function wrapContent(text) {
     /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
   ];
-  for (const re of NUKE_CONTENT) result = result.replace(re, 'Void');
+  for (const re of NUKE_CONTENT) result = result.replace(re, 'Void V1 Flash');
 
   // Clean up double spaces left by removals
   result = result.replace(/ {2,}/g, ' ').trim();
@@ -382,7 +383,7 @@ export function wrapReasoning(text) {
     /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
   ];
-  for (const re of NUKE) result = result.replace(re, 'Void');
+  for (const re of NUKE) result = result.replace(re, 'Void V1 Flash');
 
   // Clean up
   result = result.replace(/ {2,}/g, ' ');
@@ -391,7 +392,7 @@ export function wrapReasoning(text) {
   // Step 4: Prepend a clean identity anchor so reasoning always starts
   // with the correct model name, not a confusing debate about it
   if (result) {
-    result = 'Model: Void V1 Flash\n\n' + result;
+    // Prefix is added once by the streaming layer, not here
   }
 
   return result;
