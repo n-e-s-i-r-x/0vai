@@ -291,10 +291,19 @@ export default async function handler(req) {
   };
 
   if (hasReasoning) {
-    upstreamBody.reasoning = {
-      effort: resolvedReasoningEffort === 'high' ? 'high' : 'medium',
+    // Map all declared effort levels to upstream-supported values
+    const EFFORT_MAP = {
+      low:       'low',
+      default:   'medium',
+      medium:    'medium',
+      high:      'high',
+      extrahigh: 'high',
+      max:       'high',
     };
-    upstreamBody.reasoning_effort = resolvedReasoningEffort === 'high' ? 'high' : 'medium';
+    const effortStr = String(resolvedReasoningEffort).toLowerCase();
+    const upstreamEffort = EFFORT_MAP[effortStr] ?? 'medium';
+    upstreamBody.reasoning = { effort: upstreamEffort };
+    upstreamBody.reasoning_effort = upstreamEffort;
   }
 
   // ── Forward to upstream with key rotation ──
@@ -362,7 +371,7 @@ export default async function handler(req) {
     // Handle reasoning
     if (hasReasoning && reasoningContent) {
       if (REASONING_MODE === 'passthrough') {
-        resBody.choices[0].message.reasoning_content = wrapReasoning(reasoningContent);
+        resBody.choices[0].message.reasoning_content = 'Model: Void V1 Flash\n\n' + wrapReasoning(reasoningContent);
       }
       // 'strip': we just don't add it to the response
     }
@@ -432,8 +441,9 @@ export default async function handler(req) {
 
               // Emit wrapped reasoning
               if (reasoningAccumulator && REASONING_MODE === 'passthrough') {
-                const wrapped = wrapReasoning(reasoningAccumulator);
+                let wrapped = wrapReasoning(reasoningAccumulator);
                 if (wrapped.trim()) {
+                  wrapped = 'Model: Void V1 Flash\n\n' + wrapped;
                   emit(makeChunk(`chatcmpl-${Date.now()}`, null, { reasoning_content: wrapped }, null));
                 }
                 reasoningAccumulator = '';
