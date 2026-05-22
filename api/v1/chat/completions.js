@@ -242,7 +242,7 @@ export default async function handler(req) {
 
   // Default reasoning ON at medium - tools that auto-detect reasoning pass this,
   // tools that don't will still get reasoning by default.
-  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'medium' : 'medium');
+  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : null);
   const hasReasoning = resolvedReasoningEffort != null && resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
 
   const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
@@ -358,6 +358,9 @@ export default async function handler(req) {
 
       // Whether we've sent the reasoning header prefix yet
       let reasoningHeaderSent = false;
+      // Buffer to accumulate full reasoning before desquishing + emitting
+      let reasoningBuffer = '';
+      let reasoningFlushed = false;
 
       // Track stream ID/created from first chunk
       let streamId = `chatcmpl-${Date.now()}`;
@@ -417,20 +420,21 @@ export default async function handler(req) {
             if (hasReasoning && delta.reasoning_content != null && REASONING_MODE === 'passthrough') {
               let r = delta.reasoning_content;
               if (r) {
-                r = wrapReasoning(r);
-                if (r) {
-                  if (!reasoningHeaderSent) {
-                    // Prefix first reasoning chunk with model label
-                    r = 'Model: Void V1 Flash\n\n' + r;
-                    reasoningHeaderSent = true;
-                  }
-                  emit(makeChunk({ reasoning_content: r }, null));
-                }
+                reasoningBuffer += r;
+                reasoningHeaderSent = true; // mark that reasoning is flowing
               }
             }
 
             // ── Content delta - stream LIVE ──
             if (delta.content != null) {
+              // Flush buffered reasoning before first content chunk
+              if (!reasoningFlushed && reasoningBuffer) {
+                const cleaned = wrapReasoning(reasoningBuffer);
+                if (cleaned && cleaned.trim()) {
+                  emit(makeChunk({ reasoning_content: cleaned }, null));
+                }
+                reasoningFlushed = true;
+              }
               let c = delta.content;
 
               // Strip any embedded <think> tags in content field
@@ -448,14 +452,8 @@ export default async function handler(req) {
             if (hasReasoning && delta.thinking != null && REASONING_MODE === 'passthrough') {
               let t = delta.thinking;
               if (t) {
-                t = wrapReasoning(t);
-                if (t) {
-                  if (!reasoningHeaderSent) {
-                    t = 'Model: Void V1 Flash\n\n' + t;
-                    reasoningHeaderSent = true;
-                  }
-                  emit(makeChunk({ reasoning_content: t }, null));
-                }
+                reasoningBuffer += t;
+                reasoningHeaderSent = true;
               }
             }
 
@@ -468,6 +466,13 @@ export default async function handler(req) {
       } catch (e) {
         // Stream read error - close cleanly
       } finally {
+        // Flush any remaining reasoning buffer if content never came
+        if (!reasoningFlushed && reasoningBuffer) {
+          const cleaned = wrapReasoning(reasoningBuffer);
+          if (cleaned && cleaned.trim()) {
+            emit(makeChunk({ reasoning_content: cleaned }, null));
+          }
+        }
         if (!doneSent) controller.enqueue(encoder.encode(SSE.done()));
         try { controller.close(); } catch (_) {}
       }
