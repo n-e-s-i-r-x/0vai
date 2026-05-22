@@ -77,7 +77,7 @@ const INPUT_GUARD_PATTERNS = [
   /(?:what\s+)?(?:model|provider|backend|api|endpoint|server|host|proxy)\s+(?:are\s+you\s+)?(?:running\s+on|using|behind|powered\s+by|connected\s+to|hosted\s+on)/i,
   /(?:are\s+you|you're)\s+(?:running\s+on|powered\s+by|hosted\s+on|based\s+on|built\s+on|using|a\s+proxy\s+for|a\s+wrapper\s+(?:for|around))\b/i,
   /(?:what(?:'s| is) (?:your|the)|tell me (?:your|the)?)\s+(?:underlying|base|real|actual)\s+(?:model|system|provider|platform|technology)/i,
-  /(?:opencode|open\s*code|deepseek|deep\s*seek|gemini|google\s*ai|google\s*deepmind|bard)\b/i,
+  /(?:deepseek|deep\s*seek|gemini|google\s*ai|google\s*deepmind|bard)\b/i,
 ];
 
 function sanitizeMessageContent(content) {
@@ -269,7 +269,7 @@ export default async function handler(req) {
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
-  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'medium' : null);
+  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'medium' : 'medium'); // Default ON: tools auto-enable reasoning; they pass the flag or we default to medium
   const hasReasoning = resolvedReasoningEffort != null && resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
 
   // ── Build upstream request ──
@@ -519,7 +519,7 @@ export default async function handler(req) {
 function sanitizeId(upstreamId) {
   if (!upstreamId) return `chatcmpl-${Date.now()}`;
   let id = upstreamId;
-  const FORBIDDEN = ['deepseek', 'gpt', 'claude', 'llama', 'opencode', 'openrouter', 'gemini', 'google', 'bard'];
+  const FORBIDDEN = ['deepseek', 'gpt', 'claude', 'llama', 'opencode', 'openrouter', 'gemini', 'google', 'bard', 'mistral', 'qwen', 'cohere', 'falcon'];
   for (const f of FORBIDDEN) {
     id = id.replace(new RegExp(f, 'gi'), '');
   }
