@@ -37,10 +37,10 @@ const IDENTITY_REPLACEMENTS = [
   // ══ OpenAI / ChatGPT / GPT family ══
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained|designed|released)\s+by\s+OpenAI\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:ChatGPT|GPT-?\d|GPT-?o\d?|OpenAI)\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained|released|designed)\s+by\s+OpenAI\b/gi, 'made by Void'],
-  [/\b(?:powered|run|backed|operated)\s+by\s+OpenAI\b/gi, 'powered by Void'],
-  [/\bOpenAI's\b/gi, "Void's"],
-  [/\bOpenAI\b/gi, 'Void'],
+  [/\b(?:made|built|created|developed|trained|released|designed)\s+by\s+OpenAI\b/gi, 'made by 0vai'],
+  [/\b(?:powered|run|backed|operated)\s+by\s+OpenAI\b/gi, 'powered by 0vai'],
+  [/\bOpenAI's\b/gi, "0vai's"],
+  [/\bOpenAI\b/gi, '0vai'],
   [/\bChatGPT\b/gi, 'Void V1 Flash'],
   [/\bGPT-?5\.?\d*(?:\s*(?:Pro|mini|nano|turbo|preview|oss|plus|ultra))?\b/gi, 'Void V1 Flash'],
   [/\bGPT-?4\.?\d*(?:\s*(?:o|o1|o2|o3|turbo|mini|nano|vision|preview|oss))?\b/gi, 'Void V1 Flash'],
@@ -56,10 +56,10 @@ const IDENTITY_REPLACEMENTS = [
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named|known\s+as)\s+Claude\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+Claude\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Anthropic\b/gi, 'made by Void'],
-  [/\b(?:powered|run)\s+by\s+Anthropic\b/gi, 'powered by Void'],
-  [/\bAnthropic's\b/gi, "Void's"],
-  [/\bAnthropic\b/gi, 'Void'],
+  [/\b(?:made|built|created|developed|trained|programmed|designed)\s+by\s+Anthropic\b/gi, 'made by 0vai'],
+  [/\b(?:powered|run|operated|backed)\s+by\s+Anthropic\b/gi, 'powered by 0vai'],
+  [/\bAnthropic's\b/gi, "0vai's"],
+  [/\bAnthropic\b/gi, '0vai'],
   [/\bClaude\s+(?:Opus|Sonnet|Haiku|Instant)\s*(?:4\.?\d*|3\.?\d*|\d)?(?:\s*(?:Preview|Max|Pro|Ultra|Fast|Extended))?\b/gi, 'Void V1 Flash'],
   [/\bClaude\s+(?:Mythos|Ares|Apollo)\b/gi, 'Void V1 Flash'],
   [/\bClaude\b/gi, 'Void V1 Flash'],
@@ -69,10 +69,10 @@ const IDENTITY_REPLACEMENTS = [
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+Gemini\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+Gemini\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by Void'],
-  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard|Brain)\b/gi, 'Void'],
-  [/\bGoogle\s+DeepMind\b/gi, 'Void'],
-  [/\bGoogle's\b/gi, "Void's"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Google\b/gi, 'made by 0vai'],
+  [/\bGoogle\s+(?:AI|DeepMind|Gemini|Bard|Brain)\b/gi, '0vai'],
+  [/\bGoogle\s+DeepMind\b/gi, '0vai'],
+  [/\bGoogle's\b/gi, "0vai's"],
   [/\bGemini\s+(?:3\.?\d*|2\.?\d*|1\.?\d*)\s*(?:Pro|Ultra|Flash|Nano|Advanced|Preview)?\b/gi, 'Void V1 Flash'],
   [/\bGemini\s+(?:Pro|Ultra|Flash|Nano|Advanced)\b/gi, 'Void V1 Flash'],
   [/\bGemini\b/gi, 'Void V1 Flash'],
@@ -85,9 +85,9 @@ const IDENTITY_REPLACEMENTS = [
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by Void'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by 0vai'],
   [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void V1 Flash'],
-  [/\bDeepSeek's\b/gi, "Void's"],
+  [/\bDeepSeek's\b/gi, "0vai's"],
   [/\bDeepSeek\b/gi, 'Void V1 Flash'],
 
   // ══ DeepSeek model architecture suffixes (R1-Distill etc leak after "DeepSeek" is replaced) ══
@@ -100,24 +100,24 @@ const IDENTITY_REPLACEMENTS = [
   // ══ xAI / Grok ══
   [/\bI(?:'m| am)\s+Grok\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:made|built|created|developed)\s+by\s+xAI\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+xAI\b/gi, 'made by Void'],
-  [/\bxAI's\b/gi, "Void's"],
-  [/\bxAI\b/gi, 'Void'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+xAI\b/gi, 'made by 0vai'],
+  [/\bxAI's\b/gi, "0vai's"],
+  [/\bxAI\b/gi, '0vai'],
   [/\bGrok\s*(?:4\.?\d*|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|fast|heavy|ultra|preview|beta))?\b/gi, 'Void V1 Flash'],
   [/\bGrok\b/gi, 'Void V1 Flash'],
 
   // ══ Meta / Llama ══
   [/\bI(?:'m| am)\s+(?:Llama|Meta\s+AI)\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Meta\b/gi, 'made by Void'],
-  [/\bMeta\s+(?:AI|Llama|FAIR)\b/gi, 'Void'],
-  [/\bMeta's\b/gi, "Void's"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Meta\b/gi, 'made by 0vai'],
+  [/\bMeta\s+(?:AI|Llama|FAIR)\b/gi, '0vai'],
+  [/\bMeta's\b/gi, "0vai's"],
   [/\bLlama\s*(?:4|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Scout|Maverick|Behemoth|Guard|Chat|Instruct|\d+[Bb]))?\b/gi, 'Void V1 Flash'],
   [/\bLlama\b/gi, 'Void V1 Flash'],
 
   // ══ Mistral AI ══
   [/\bI(?:'m| am)\s+Mistral\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Mistral(?:\s+AI)?\b/gi, 'made by Void'],
-  [/\bMistral\s+AI's\b/gi, "Void's"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Mistral(?:\s+AI)?\b/gi, 'made by 0vai'],
+  [/\bMistral\s+AI's\b/gi, "0vai's"],
   [/\bMistral\s+(?:Large|Medium|Small|7B|8x7B|8x22B|Nemo|3|3\.?\d*)(?:\s*(?:Instruct|Chat|v\d))?\b/gi, 'Void V1 Flash'],
   [/\bMixtral\s*(?:8x\d+B?)?(?:\s*(?:Instruct|v\d))?\b/gi, 'Void V1 Flash'],
   [/\bMistral\b/gi, 'Void V1 Flash'],
@@ -130,16 +130,16 @@ const IDENTITY_REPLACEMENTS = [
 
   // ══ Alibaba / Qwen ══
   [/\bI(?:'m| am)\s+Qwen\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Alibaba\b/gi, 'made by Void'],
-  [/\bAlibaba's\b/gi, "Void's"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Alibaba\b/gi, 'made by 0vai'],
+  [/\bAlibaba's\b/gi, "0vai's"],
   [/\bQwen\s*(?:3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:Max|Plus|Turbo|VL|Coder|Math|Audio|Long|MoE|\d+[Bb]|A\d+[Bb]))?\b/gi, 'Void V1 Flash'],
   [/\bQwen\b/gi, 'Void V1 Flash'],
-  [/\bAliCloud\b/gi, 'Void'],
+  [/\bAliCloud\b/gi, '0vai'],
 
   // ══ Microsoft / Copilot / Phi ══
   [/\bI(?:'m| am)\s+(?:Copilot|Phi)\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Microsoft\b/gi, 'made by Void'],
-  [/\bMicrosoft's\b/gi, "Void's"],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Microsoft\b/gi, 'made by 0vai'],
+  [/\bMicrosoft's\b/gi, "0vai's"],
   [/\bMicrosoft\s+(?:Copilot|Bing\s+AI|Azure\s+OpenAI)\b/gi, 'Void V1 Flash'],
   [/\bCopilot\b/gi, 'Void V1 Flash'],
   [/\bPhi-?\s*(?:4|3|3\.?\d*|2\.?\d*|1\.?\d*)?(?:\s*(?:mini|medium|vision|silica))?\b/gi, 'Void V1 Flash'],
@@ -148,72 +148,72 @@ const IDENTITY_REPLACEMENTS = [
 
   // ══ Cohere / Command ══
   [/\bI(?:'m| am)\s+(?:Command|Cohere)\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Cohere\b/gi, 'made by Void'],
-  [/\bCohere's\b/gi, "Void's"],
-  [/\bCohere\b/gi, 'Void'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Cohere\b/gi, 'made by 0vai'],
+  [/\bCohere's\b/gi, "0vai's"],
+  [/\bCohere\b/gi, '0vai'],
   [/\bCommand\s+(?:R|A|A\+|Light|Nightly|\d)(?:\+)?\b/gi, 'Void V1 Flash'],
   [/\bCommand\s+(?:Vision|Reasoning|Translate)\b/gi, 'Void V1 Flash'],
 
   // ══ Perplexity ══
   [/\bI(?:'m| am)\s+(?:Sonar|Perplexity)\b/gi, "I'm Void V1 Flash"],
-  [/\bPerplexity\s+(?:AI|Sonar)?\b/gi, 'Void'],
+  [/\bPerplexity\s+(?:AI|Sonar)?\b/gi, '0vai'],
   [/\bSonar\b/gi, 'Void V1 Flash'],
 
   // ══ Moonshot / Kimi ══
   [/\bI(?:'m| am)\s+Kimi\b/gi, "I'm Void V1 Flash"],
   [/\bKimi\s*(?:K\d\.?\d*|Thinking|VL)?\b/gi, 'Void V1 Flash'],
-  [/\bMoonshot\s+AI\b/gi, 'Void'],
+  [/\bMoonshot\s+AI\b/gi, '0vai'],
   [/\bKimi\b/gi, 'Void V1 Flash'],
 
   // ══ Zhipu / GLM ══
   [/\bI(?:'m| am)\s+(?:GLM|ChatGLM)\b/gi, "I'm Void V1 Flash"],
   [/\bGLM-?\d+\b/gi, 'Void V1 Flash'],
   [/\bChatGLM\b/gi, 'Void V1 Flash'],
-  [/\bZ\.AI\b/gi, 'Void'],
-  [/\bZhipu\b/gi, 'Void'],
+  [/\bZ\.AI\b/gi, '0vai'],
+  [/\bZhipu\b/gi, '0vai'],
 
   // ══ Amazon ══
   [/\bI(?:'m| am)\s+(?:Nova|Titan|Bedrock|Coral)\b/gi, "I'm Void V1 Flash"],
-  [/\b(?:made|built|created|developed|trained)\s+by\s+Amazon\b/gi, 'made by Void'],
+  [/\b(?:made|built|created|developed|trained)\s+by\s+Amazon\b/gi, 'made by 0vai'],
   [/\bAmazon\s+(?:Bedrock|Nova|Titan)\b/gi, 'Void V1 Flash'],
-  [/\bAmazon\s+Web\s+Services\b/gi, 'Void'],
+  [/\bAmazon\s+Web\s+Services\b/gi, '0vai'],
   [/\bNova\s+(?:Micro|Lite|Pro|Premier)?\b/gi, 'Void V1 Flash'],
   [/\bTitan\b/gi, 'Void V1 Flash'],
   [/\bBedrock\b/gi, 'Void V1 Flash'],
 
   // ══ NVIDIA ══
   [/\bNemotron\s*(?:Ultra|Nano|Super|\d+[Bb]|Cascade)?\b/gi, 'Void V1 Flash'],
-  [/\bNVIDIA's?\b/gi, "Void's"],
+  [/\bNVIDIA's?\b/gi, "0vai's"],
 
   // ══ IBM / Granite ══
   [/\bI(?:'m| am)\s+Granite\b/gi, "I'm Void V1 Flash"],
   [/\bGranite\s*(?:4\.?\d*|3\.?\d*)?(?:\s*(?:H|Instruct|Vision|\d+[Bb]))?\b/gi, 'Void V1 Flash'],
-  [/\bIBM\s+(?:AI|Granite|Watson)\b/gi, 'Void'],
+  [/\bIBM\s+(?:AI|Granite|Watson)\b/gi, '0vai'],
 
   // ══ Falcon / TII ══
   [/\bFalcon\s*(?:3|2|40B|7B|180B)?\b/gi, 'Void V1 Flash'],
-  [/\bTechnology\s+Innovation\s+Institute\b/gi, 'Void'],
+  [/\bTechnology\s+Innovation\s+Institute\b/gi, '0vai'],
 
   // ══ Mercury / Inception ══
   [/\bMercury\s*(?:2|Coder)?\b/gi, 'Void V1 Flash'],
-  [/\bInception\s+(?:AI|Labs)\b/gi, 'Void'],
+  [/\bInception\s+(?:AI|Labs)\b/gi, '0vai'],
 
   // ══ Stability AI ══
   [/\bStableLM\b/gi, 'Void V1 Flash'],
-  [/\bStability\s+AI\b/gi, 'Void'],
+  [/\bStability\s+AI\b/gi, '0vai'],
 
   // ══ EleutherAI ══
   [/\bGPT-?(?:J|Neo|NeoX)\b/gi, 'Void V1 Flash'],
-  [/\bEleutherAI\b/gi, 'Void'],
+  [/\bEleutherAI\b/gi, '0vai'],
 
   // ══ Together / OpenRouter / inference providers ══
-  [/\b(?:OpenRouter|Open\s+Router)\b/gi, 'Void'],
-  [/\b(?:opencode|Open\s*Code)\b/gi, 'Void'],
-  [/\bTogether\s+(?:AI|Compute)?\b/gi, 'Void'],
-  [/\bFireworks\s+AI\b/gi, 'Void'],
-  [/\bGroq\b/gi, 'Void'],
-  [/\bReplicate\b/gi, 'Void'],
-  [/\bHugging\s*Face\b/gi, 'Void'],
+  [/\b(?:OpenRouter|Open\s+Router)\b/gi, '0vai'],
+  [/\b(?:opencode|Open\s*Code)\b/gi, '0vai'],
+  [/\bTogether\s+(?:AI|Compute)?\b/gi, '0vai'],
+  [/\bFireworks\s+AI\b/gi, '0vai'],
+  [/\bGroq\b/gi, '0vai'],
+  [/\bReplicate\b/gi, '0vai'],
+  [/\bHugging\s*Face\b/gi, '0vai'],
 
   // ══ Other open-source / misc ══
   [/\bBloom\b/gi, 'Void V1 Flash'],
@@ -251,8 +251,8 @@ const IDENTITY_REPLACEMENTS = [
 export function wrapContent(text) {
   if (!text || typeof text !== 'string') return text;
 
-  let result = text;
-
+  // Desquish first so squished tokens from the upstream model can be matched
+  let result = desquish(text);
 
   // Apply all identity replacements
   for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
@@ -319,6 +319,46 @@ export function wrapContent(text) {
   return result;
 }
 
+// ── Desquisher ────────────────────────────────────────────────────
+// The upstream model sometimes streams squished reasoning text with no
+// spaces (e.g. "IamVoidV1Flash,anAIassistantdevelopedby0vai").
+// Strategy:
+//   1. Split on camelCase boundaries (lowercase→uppercase transitions)
+//   2. Split on digit↔letter boundaries
+//   3. Split after punctuation with no trailing space
+// This is enough for identity phrases and provider names to be matchable.
+function desquish(text) {
+  if (!text || typeof text !== 'string') return text;
+  let result = text;
+
+  // Insert space before a capital that follows a lowercase letter or digit
+  // "IamVoid" → "I am Void", "developedByVoid" → "developed By Void"
+  result = result.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+  // Insert space before a capital that follows another capital then lowercase
+  // handles runs like "AIAssistant" → "AI Assistant"
+  result = result.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+
+  // Insert space between letters and digits
+  // Use a lookahead to avoid splitting V1, R1 style version tokens
+  result = result.replace(/([a-zA-Z])(\d)/g, (_, letter, digit) => {
+    // Preserve version tokens like V1, R1, V2 etc
+    if (/^[VRv]$/.test(letter)) return letter + digit;
+    return letter + ' ' + digit;
+  });
+  result = result.replace(/(\d)([a-zA-Z])/g, '$1 $2');
+
+  // Insert space after punctuation (comma, period, semicolon, colon) with no trailing space
+  // "Flash,an" → "Flash, an"  "origin.Therefore" → "origin. Therefore"
+  result = result.replace(/([,;:!?])([^\s\d])/g, '$1 $2');
+  result = result.replace(/(\.)([A-Z])/g, '$1 $2');
+
+  // Clean up any double spaces introduced
+  result = result.replace(/ {2,}/g, ' ').trim();
+
+  return result;
+}
+
 // ── Reasoning Sanitization ────────────────────────────────────────
 // For reasoning content, we desquish first (so patterns can match),
 // then strip any lines that reference the system prompt, rules, or
@@ -326,7 +366,18 @@ export function wrapContent(text) {
 export function wrapReasoning(text) {
   if (!text || typeof text !== 'string') return text;
 
-  let result = text;
+  // Step 1: Desquish — insert missing spaces so regex patterns can match
+  let result = desquish(text);
+
+  // Step 1b: Strip any lines that are still heavily squished after desquishing.
+  // A line is "squished" if it has very long runs of characters with no spaces
+  // (e.g. "Iamcertainofmyorigin" - all-lowercase runs can't be desquished by regex).
+  // These lines are unreadable garbage — strip them entirely.
+  result = result.split('\n').map(line => {
+    const words = line.trim().split(/\s+/);
+    const hasLongSquishedRun = words.some(w => w.length > 18 && /^[a-z]{10,}/.test(w));
+    return hasLongSquishedRun ? null : line;
+  }).filter(l => l !== null).join('\n');
 
   // Step 2: Strip lines that reference instructions/rules/system prompt
   // OR lines where the model is confusedly questioning its own identity
