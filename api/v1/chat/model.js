@@ -19,42 +19,56 @@ export default function handler(req) {
     );
 
   const model = {
+    // ── Core identity ──
     id:                          'voidv1-flash',
     object:                      'model',
     created:                     1700000000,
     owned_by:                    'void',
     name:                        'Void V1 Flash',
-    description:                 'Advanced high-reasoning mode of Void V1 Flash featuring 1 trillion total parameters with 50B active parameters, optimized for deeper thinking, coding, planning, and complex agent workflows with up to 1M token context.',
+    display_name:                'Void V1 Flash',
+    description:                 'Advanced high-reasoning model optimized for coding, planning, and complex agent workflows with up to 1M token context and configurable reasoning effort.',
 
     // ── Context & limits ──
     context_length:              1000000,
+    context_window:              1000000,
     max_output_tokens:           32000,
     max_completion_tokens:       32000,
+    max_tokens:                  32000,
 
-    // ── Top-level reasoning flags ──
+    // ── Reasoning flags (top-level, all formats tools check) ──
     reasoning:                   true,
     reasoning_effort:            true,
     supports_reasoning_effort:   true,
     reasoning_effort_levels:     REASONING_EFFORT_LEVELS,
+    // OpenAI o-series style
+    supports_reasoning:          true,
+    has_reasoning:               true,
 
-    // ── OpenRouter-style top_provider (critical for tool detection) ──
+    // ── OpenRouter-style top_provider (OpenCode Zen, Cursor, Windsurf read this) ──
     top_provider: {
       context_length:            1000000,
       max_completion_tokens:     32000,
       reasoning:                 true,
       reasoning_effort:          true,
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS,
+      supports_reasoning_effort: true,
+      is_moderated:              false,
     },
 
-    // ── Capabilities ──
+    // ── Capabilities (Claude Code, OpenCode, Windsurf check this object) ──
     capabilities: {
       reasoning:                 true,
       reasoning_effort:          true,
+      supports_reasoning_effort: true,
+      reasoning_effort_levels:   REASONING_EFFORT_LEVELS,
       tools:                     true,
+      tool_choice:               true,
       streaming:                 true,
       response_format:           true,
       function_calling:          true,
+      parallel_tool_calls:       true,
       vision:                    false,
+      image_generation:          false,
     },
 
     // ── Architecture (OpenRouter format) ──
@@ -72,10 +86,11 @@ export default function handler(req) {
       request:                   '0',
     },
 
-    // ── Metadata (string format) ──
+    // ── Metadata (string format — some tools parse string fields) ──
     metadata: {
       reasoning:                 'true',
       reasoning_effort:          'true',
+      supports_reasoning_effort: 'true',
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS.join(','),
     },
 
