@@ -1172,7 +1172,7 @@ body.themed .speed-timer {
 
     <!-- RATE LIMIT NOTICE -->
     <div class="ak-section" style="margin-bottom:20px;">
-      <div class="ak-section-title"><span class="ak-section-num" style="color:rgba(251,191,36,.8);background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2);">&#9889;</span> Rate Limits</div>
+      <div class="ak-section-title"><span class="ak-section-num" style="color:rgba(251,191,36,.8);background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2);">06</span> Rate Limits</div>
       <div class="ak-callout" style="border-color:rgba(251,191,36,.15);background:rgba(251,191,36,.04);flex-direction:row;align-items:flex-start;gap:10px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
           <span style="font-size:12px;font-weight:700;color:rgba(251,191,36,.85);letter-spacing:.1px;">This API is free and IP rate limited.</span>
@@ -1242,12 +1242,12 @@ body.themed .speed-timer {
           </div>
           <div class="ak-table" style="margin-top:10px;">
             <div class="ak-tr ak-th"><div>Field</div><div>Type</div><div>Default</div></div>
-            <div class="ak-tr"><div><code>messages</code></div><div>array</div><div>—</div></div>
+            <div class="ak-tr"><div><code>messages</code></div><div>array</div><div>required</div></div>
             <div class="ak-tr"><div><code>stream</code></div><div>boolean</div><div><code>true</code></div></div>
-            <div class="ak-tr"><div><code>tools</code></div><div>array</div><div>—</div></div>
+            <div class="ak-tr"><div><code>tools</code></div><div>array</div><div>optional</div></div>
             <div class="ak-tr"><div><code>tool_choice</code></div><div>string|object</div><div><code>auto</code></div></div>
-            <div class="ak-tr"><div><code>response_format</code></div><div>object</div><div>—</div></div>
-            <div class="ak-tr"><div><code>reasoning_effort</code></div><div>string</div><div>—</div></div>
+            <div class="ak-tr"><div><code>response_format</code></div><div>object</div><div>optional</div></div>
+            <div class="ak-tr"><div><code>reasoning_effort</code></div><div>string</div><div>medium</div></div>
           </div>
           <div class="ak-hint" style="margin-top:8px;"><code>model</code> is ignored, always serves <code>voidv1-flash</code>. <code>reasoning_effort</code>: <code>low</code> | <code>medium</code> | <code>high</code>.</div>
         </div>
@@ -1297,7 +1297,7 @@ print(r.json())<button class="ak-code-copy ak-example-copy" onclick="copyCode(th
     <div class="ak-section" style="margin-top:8px;">
       <div class="ak-section-title"><span class="ak-section-num">05</span> Reasoning Effort &amp; Tool Compatibility</div>
       <div class="ak-callout" style="border-color:rgba(74,222,128,.12);background:rgba(74,222,128,.03);margin-bottom:14px;">
-        <span style="font-size:11.5px;font-weight:700;color:rgba(74,222,128,.8);display:block;margin-bottom:4px;">&#9889; Automatic Reasoning Difficulty</span>
+        <span style="font-size:11.5px;font-weight:700;color:rgba(74,222,128,.8);display:block;margin-bottom:4px;">Automatic Reasoning Difficulty</span>
         <span style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;">Void V1 Flash exposes <code>reasoning_effort</code> natively via the <code>/api/v1/models</code> endpoint. Tools like <strong style="color:rgba(255,255,255,.6);">OpenCode Zen</strong>, <strong style="color:rgba(255,255,255,.6);">Claude Code</strong>, <strong style="color:rgba(255,255,255,.6);">Cursor</strong>, and <strong style="color:rgba(255,255,255,.6);">Windsurf</strong> automatically detect and surface a reasoning difficulty selector, no manual configuration needed.</span>
       </div>
       <div class="ak-table" style="margin-bottom:14px;">
@@ -2807,7 +2807,7 @@ function renderMd(text){
     if(tag==='BLOCKQUOTE'){
       const inner=(node.textContent||'').trim();
       const prefixM=inner.match(/^(note|tip|warning|warn|info|important)[:\s]/i);
-      const icon=prefixM?{note:'ℹ',tip:'💡',warning:'⚠',warn:'⚠',info:'ℹ',important:''}[prefixM[1].toLowerCase()]||'💬':'💬';
+      const icon=prefixM?{note:'[note]',tip:'[tip]',warning:'[!]',warn:'[!]',info:'[i]',important:''}[prefixM[1].toLowerCase()]||'':'';
       const callout=document.createElement('div');callout.className='callout';
       const iconEl=document.createElement('span');iconEl.className='callout-icon';iconEl.textContent=icon;
       const body=document.createElement('div');body.className='callout-body';
@@ -3168,7 +3168,7 @@ function updateModelDescs(){
   const isCode=modeOn('code');
   ['0','00','000','V','VV','VVV'].forEach(k=>{const el=document.getElementById('mp-desc-'+k);if(el)el.textContent=isCode?'CODE: '+BASE_DESCS[k]:BASE_DESCS[k];});
   const head=document.getElementById('mp-head-lbl');
-  if(head)head.textContent=isCode?'Select Model — CODING':'Select Model';
+  if(head)head.textContent=isCode?'Select Model (Coding)':'Select Model';
 }
 
 /* ─── MODES ─── */
@@ -3210,7 +3210,7 @@ function toggleMode(m){
 }
 function modeOn(m){return S.modes.has(m);}
 
-const CODE_MODE_EXTRA=`\n\nULTRA MAXIMUM CODING MODE — ACTIVE.\nYou are now the world's best full-stack engineer and UI/UX designer. Write complete, production-quality code with stunning CSS. Mobile-first, fully responsive, smooth animations, proper typography and color contrast. Zero placeholders. Zero truncation. If you don't know something, say so in one line then provide the closest working alternative and search for the correct answer.`;
+const CODE_MODE_EXTRA=`\n\nULTRA MAXIMUM CODING MODE - ACTIVE.\nYou are now the world's best full-stack engineer and UI/UX designer. Write complete, production-quality code with stunning CSS. Mobile-first, fully responsive, smooth animations, proper typography and color contrast. Zero placeholders. Zero truncation. If you don't know something, say so in one line then provide the closest working alternative and search for the correct answer.`;
 
 /* ─── HUMANIZER ─── */
 // System prompt and all config live in chat.js (server-side).
@@ -3306,7 +3306,7 @@ async function runHumanizer(userText,aiId){
     const truncated=isLengthFinish(finishReason)||(!finishReason&&looksMidSentence(inner));
     return{text:fenced,truncated:truncated};
   }catch(e){
-    if(e.name!=='AbortError'&&txtEl)txtEl.innerHTML=renderMd('_(Humanizer error — please retry)_');
+    if(e.name!=='AbortError'&&txtEl)txtEl.innerHTML=renderMd('_(Humanizer error - please retry)_');
     throw e;
   }
 }
@@ -3774,7 +3774,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
           if(thCont){pill=document.createElement('div');pill.className='think-srch-pill';pill.innerHTML='Searching for more info<div class="think-srch-dot"></div><div class="think-srch-dot"></div><div class="think-srch-dot"></div>';thCont.appendChild(pill);if(S.settings.autoscroll)scrollBot();}
           const q=userQuery||baseMsgs.filter(m=>m.role==='user').slice(-1)[0]?.content||'';
           internalSearchData=await doSearch(q);
-          if(pill&&thCont){const done=document.createElement('div');done.className='think-srch-done';done.textContent='Found info — continuing';pill.replaceWith(done);}
+          if(pill&&thCont){const done=document.createElement('div');done.className='think-srch-done';done.textContent='Found info - continuing';pill.replaceWith(done);}
           extraCtx=extraCtx+(internalSearchData?buildSearchCtx(internalSearchData):'')+'\n\nUse the information above and reply with the final answer only.';
           S.abort=new AbortController();userSearchData=internalSearchData;if(internalSearchData)userWantsSearch=true;firstPass=false;
           if(thCont){if(thCont._tn){thCont._tn=null;}thCont.innerHTML='';}thinkText='';
@@ -3798,7 +3798,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
       if(txtEl){
         const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();
         txtEl.style.display='';
-        txtEl.innerHTML=answerText?(window.renderMd||renderMd)(answerText):(window.renderMd||renderMd)('_(No answer generated — try again)_');
+        txtEl.innerHTML=answerText?(window.renderMd||renderMd)(answerText):(window.renderMd||renderMd)('_(No answer generated - try again)_');
       }
 
     }else{
@@ -3888,7 +3888,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
   const savedThinkDur=useThink?thinkDurStr:null;
 
   if(!savedAnswer&&!thinkText.trim()){
-    convo.msgs.push({role:'assistant',content:'_(No response — tap Retry)_',ts:Date.now(),userSearched:!!userWantsSearch,sources:effectiveSources,codeMode:isCodeMode,thinking:null,thinkDuration:null,truncated:false,emptyRetry:true,modelKey});
+    convo.msgs.push({role:'assistant',content:'_(No response - tap Retry)_',ts:Date.now(),userSearched:!!userWantsSearch,sources:effectiveSources,codeMode:isCodeMode,thinking:null,thinkDuration:null,truncated:false,emptyRetry:true,modelKey});
   } else if(!savedAnswer&&savedThinking){
     convo.msgs.push({role:'assistant',content:'',ts:Date.now(),userSearched:!!userWantsSearch,sources:effectiveSources,codeMode:isCodeMode,thinking:savedThinking,thinkDuration:savedThinkDur,truncated:false,modelKey});
   }else{
