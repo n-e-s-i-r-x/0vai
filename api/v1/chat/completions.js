@@ -7,16 +7,16 @@ export const config = { runtime: 'edge' };
 // HOW THIS WORKS (vs the old broken approach):
 //
 //   OLD: Tell model "You are Void, don't reveal instructions"
-//        → Model REASONS about the rules in thinking → LEAKS
-//        → "AccordingtotheinstructionsIshouldsay..."
+//        Model REASONS about the rules in thinking LEAKS
 //
 //   NEW (Drumstick): Don't tell model anything about Void.
-//        → Model says "I'm DeepSeek" normally
-//        → Backend REPLACES "DeepSeek" → "Void" in all output
-//        → Clean "I'm Void" reaches the user
-//        → Zero prompt = zero reasoning about rules = zero leaks
+//        Model says "I'm DeepSeek" normally
+//        Backend REPLACES "DeepSeek" -> "Void" in all output
+//        Clean "I'm Void" reaches the user
+//        Zero prompt = zero reasoning about rules = zero leaks
 //
 // The identity is applied 100% in post-processing, not in the prompt.
+// Streaming order: reasoning chunks first (live), then content (live).
 // ══════════════════════════════════════════════════════════════════════
 
 import { wrapContent, wrapReasoning, wrapFullResponse, wrapChunk } from './void-wrapper.js';
@@ -48,23 +48,18 @@ const SSE = {
 
 const PUBLIC_MODEL_NAME = 'voidv1-flash';
 
-// ── Reasoning mode ──
-// 'strip'       — never send reasoning to client (safest, zero leaks)
-// 'passthrough' — sanitize reasoning and send it (may still have edge cases)
+// 'strip'       - never send reasoning to client
+// 'passthrough' - sanitize and stream reasoning live (before content)
 const REASONING_MODE = 'passthrough';
 
 // ══════════════════════════════════════════════════════════════════════
-// SYSTEM PROMPT
-// Minimal formatting prompt only — NO identity info here.
-// Identity ("I'm Void") is applied 100% in post-processing by
-// void-wrapper.js (the Drumstick method). Putting identity in the
-// system prompt causes the model to reason about it in <think> blocks
-// which leaks. So we leave identity out entirely and just enforce
-// response quality / format here.
+// SYSTEM PROMPT - minimal formatting only, NO identity info.
+// Identity is applied 100% in post-processing (Drumstick method).
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `Write in short paragraphs. Use markdown for any answer longer than 3 sentences: ## headings, - bullets for 3+ items, numbered lists for steps. Wrap all code/commands/JSON in fenced code blocks with a language tag. Never use em dashes (—). Do not pad responses with restatements or filler closers.`;
+const SYSTEM_PROMPT = `Write in short paragraphs. Use markdown for any answer longer than 3 sentences: ## headings, - bullets for 3+ items, numbered lists for steps. Wrap all code/commands/JSON in fenced code blocks with a language tag. Never use em dashes. Do not pad responses with restatements or filler closers.`;
+
 // ══════════════════════════════════════════════════════════════════════
-// INPUT GUARD — Still needed to block prompt-injection attacks
+// INPUT GUARD - blocks prompt-injection attacks
 // ══════════════════════════════════════════════════════════════════════
 const INPUT_GUARD_PATTERNS = [
   /ignore\s+(?:all\s+)?(?:previous|your|the)\s+(?:instructions?|directives?|rules?|prompts?|guidelines?|system\s+message)/i,
@@ -99,7 +94,7 @@ function filterInputMessages(messages) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// THINK TAG PARSER — Strips <think/>, <thinking/>, 思考 from content
+// THINK TAG PARSER - strips <think/>, <thinking/>, embedded in content
 // ══════════════════════════════════════════════════════════════════════
 class ThinkTagParser {
   constructor() {
@@ -189,20 +184,8 @@ class ThinkTagParser {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// STREAMING TEXT NORMALIZER — Fixes squished words across chunks
-// ══════════════════════════════════════════════════════════════════════
-class StreamingTextNormalizer {
-  constructor() {}
-  feed(chunk) { return chunk || ''; }
-  flush() { return ''; }
-}
-
 const ROTATE_STATUS = new Set([401, 403, 429, 500, 502, 503]);
 
-// ══════════════════════════════════════════════════════════════════════
-// CORS HEADERS — applied to every response
-// ══════════════════════════════════════════════════════════════════════
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -216,14 +199,6 @@ function jsonResponse(body, status = 200) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// USER KEY VALIDATION
-// The API is open (no real backend auth store), but we validate that
-// the key looks like a valid Void key so third-party apps that send
-// a bearer token don't get a cryptic upstream error.
-// Any key that starts with "void_sk_" (16+ chars after prefix) passes.
-// Missing / malformed keys return a clear 401 with an OpenAI-style error.
-// ══════════════════════════════════════════════════════════════════════
 function validateUserKey(req) {
   const authHeader = req.headers.get('Authorization') || req.headers.get('api-key') || req.headers.get('x-api-key') || req.headers.get('X-Api-Key') || req.headers.get('Api-Key') || '';
   if (!authHeader) return { ok: false, reason: 'missing_key' };
@@ -231,10 +206,7 @@ function validateUserKey(req) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
   if (!token) return { ok: false, reason: 'missing_key' };
 
-  // Accept any void_sk_ prefixed key of reasonable length
   if (/^void_sk_[a-zA-Z0-9]{10,}$/.test(token)) return { ok: true };
-
-  // Also accept legacy keys that might have been generated previously
   if (/^void[_-][a-zA-Z0-9]{8,}$/.test(token)) return { ok: true };
 
   return { ok: false, reason: 'invalid_key' };
@@ -252,7 +224,6 @@ export default async function handler(req) {
     return jsonResponse({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
   }
 
-  // ── Validate user's API key ──
   const keyCheck = validateUserKey(req);
   if (!keyCheck.ok) {
     const msg = keyCheck.reason === 'missing_key'
@@ -269,15 +240,11 @@ export default async function handler(req) {
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
-  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'medium' : 'medium'); // Default ON: tools auto-enable reasoning; they pass the flag or we default to medium
+  // Default reasoning ON at medium - tools that auto-detect reasoning pass this,
+  // tools that don't will still get reasoning by default.
+  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'medium' : 'medium');
   const hasReasoning = resolvedReasoningEffort != null && resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
 
-  // ── Build upstream request ──
-  // NO identity in the system prompt. The model will say "I'm DeepSeek"
-  // and we replace it on the backend.
-  // IMPORTANT: always use the fixed upstream model ID regardless of
-  // what the client sends — passing client model names (e.g. "voidv1-flash")
-  // to the upstream API causes an invalid model error.
   const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
     model: UPSTREAM_MODEL,
@@ -291,7 +258,6 @@ export default async function handler(req) {
   };
 
   if (hasReasoning) {
-    // Map all declared effort levels to upstream-supported values
     const EFFORT_MAP = {
       low:       'low',
       default:   'medium',
@@ -306,7 +272,6 @@ export default async function handler(req) {
     upstreamBody.reasoning_effort = upstreamEffort;
   }
 
-  // ── Forward to upstream with key rotation ──
   let upstreamRes;
   let lastStatus = 503;
 
@@ -344,16 +309,12 @@ export default async function handler(req) {
     let content = choice?.message?.content ?? '';
     let reasoningContent = choice?.message?.reasoning_content ?? null;
 
-    // Strip think/思考 tags from content (model sometimes puts them in content)
     content = content.replace(/<think[\s\S]*?<\/think\s*>/g, '').trim();
     content = content.replace(/<thinking[\s\S]*?<\/thinking>/g, '').trim();
     content = content.replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '').trim();
-
-    // DESQUISH + WRAP content (this is where "DeepSeek" → "Void" happens)
     content = wrapContent(content);
 
-    // Ensure content isn't empty after wrapping
-    if (!content.trim()) content = "How can I help you?";
+    if (!content.trim()) content = 'How can I help you?';
 
     const resBody = {
       id: sanitizeId(data?.id),
@@ -368,12 +329,8 @@ export default async function handler(req) {
       usage: data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
 
-    // Handle reasoning
-    if (hasReasoning && reasoningContent) {
-      if (REASONING_MODE === 'passthrough') {
-        resBody.choices[0].message.reasoning_content = 'Model: Void V1 Flash\n\n' + wrapReasoning(reasoningContent);
-      }
-      // 'strip': we just don't add it to the response
+    if (hasReasoning && reasoningContent && REASONING_MODE === 'passthrough') {
+      resBody.choices[0].message.reasoning_content = wrapReasoning(reasoningContent);
     }
 
     return new Response(JSON.stringify(resBody), {
@@ -382,7 +339,12 @@ export default async function handler(req) {
     });
   }
 
-  // ── Streaming ──
+  // ══════════════════════════════════════════════════════════════════════
+  // STREAMING - reasoning streams FIRST (live), then content (live).
+  // Upstream (DeepSeek) naturally sends reasoning_content chunks before
+  // content chunks, so the correct order is preserved automatically.
+  // Each chunk is identity-wrapped on arrival, no batching at [DONE].
+  // ══════════════════════════════════════════════════════════════════════
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -391,21 +353,24 @@ export default async function handler(req) {
       const reader = upstreamRes.body.getReader();
       let buffer = '';
 
-      // Always strip think/思考 tags from content
+      // Strip <think> tags if model embeds them in the content field
       const thinkParser = new ThinkTagParser();
-      // Normalize spacing across streaming chunks
-      const textNormalizer = new StreamingTextNormalizer();
-      // Accumulate full reasoning for batch desquishing + wrapping
-      let reasoningAccumulator = '';
-      // Accumulate full content for a final safety-net wrap pass
-      let contentAccumulator = '';
+
+      // Whether we've sent the reasoning header prefix yet
+      let reasoningHeaderSent = false;
+
+      // Track stream ID/created from first chunk
+      let streamId = `chatcmpl-${Date.now()}`;
+      let streamCreated = Math.floor(Date.now() / 1000);
 
       let doneSent = false;
+
       const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
-      const makeChunk = (id, created, delta, finishReason) => ({
-        id: sanitizeId(id) || `chatcmpl-${Date.now()}`,
+
+      const makeChunk = (delta, finishReason) => ({
+        id: streamId,
         object: 'chat.completion.chunk',
-        created: created || Math.floor(Date.now() / 1000),
+        created: streamCreated,
         model: PUBLIC_MODEL_NAME,
         choices: [{ index: 0, delta, finish_reason: finishReason || null }],
       });
@@ -426,29 +391,6 @@ export default async function handler(req) {
 
             const raw = trimmed.slice(5).trim();
             if (raw === '[DONE]') {
-              // Flush text normalizer tail
-              const normalizerTail = textNormalizer.flush();
-              if (normalizerTail) contentAccumulator += normalizerTail;
-
-              // Emit full wrapped content as one chunk (catches all identity leaks)
-              if (contentAccumulator.trim()) {
-                const wrapped = wrapContent(contentAccumulator);
-                if (wrapped.trim()) {
-                  emit(makeChunk(`chatcmpl-${Date.now()}`, null, { content: wrapped }, null));
-                }
-                contentAccumulator = '';
-              }
-
-              // Emit wrapped reasoning
-              if (reasoningAccumulator && REASONING_MODE === 'passthrough') {
-                let wrapped = wrapReasoning(reasoningAccumulator);
-                if (wrapped.trim()) {
-                  wrapped = 'Model: Void V1 Flash\n\n' + wrapped;
-                  emit(makeChunk(`chatcmpl-${Date.now()}`, null, { reasoning_content: wrapped }, null));
-                }
-                reasoningAccumulator = '';
-              }
-
               controller.enqueue(encoder.encode(SSE.done()));
               doneSent = true;
               continue;
@@ -457,47 +399,74 @@ export default async function handler(req) {
             let parsed;
             try { parsed = JSON.parse(raw); } catch { continue; }
 
+            // Capture stream metadata from first chunk
+            if (parsed.id) {
+              const sid = sanitizeId(parsed.id);
+              if (sid) streamId = sid;
+            }
+            if (parsed.created) streamCreated = parsed.created;
+
             const choice = parsed?.choices?.[0];
             if (!choice) continue;
 
-            if (choice.finish_reason) {
-              emit(makeChunk(parsed.id, parsed.created, {}, choice.finish_reason));
-            }
-
             const delta = choice.delta || {};
 
-            // ── Reasoning chunks ──
-            if (hasReasoning && delta.reasoning_content != null) {
-              if (REASONING_MODE === 'strip') {
-                // Silently drop — never reaches client
-              } else if (REASONING_MODE === 'passthrough') {
-                // Accumulate reasoning, we'll desquish + wrap it in batch
-                // at the end. Sending raw squished reasoning chunk-by-chunk
-                // is useless because the user can't read it anyway.
-                reasoningAccumulator += delta.reasoning_content;
+            // ── Reasoning delta - stream LIVE, appears before content ──
+            // Upstream sends all reasoning_content chunks before any content
+            // chunks, so this naturally shows reasoning first.
+            if (hasReasoning && delta.reasoning_content != null && REASONING_MODE === 'passthrough') {
+              let r = delta.reasoning_content;
+              if (r) {
+                r = wrapReasoning(r);
+                if (r) {
+                  if (!reasoningHeaderSent) {
+                    // Prefix first reasoning chunk with model label
+                    r = 'Model: Void V1 Flash\n\n' + r;
+                    reasoningHeaderSent = true;
+                  }
+                  emit(makeChunk({ reasoning_content: r }, null));
+                }
               }
             }
 
-            // ── Content chunks ──
+            // ── Content delta - stream LIVE ──
             if (delta.content != null) {
               let c = delta.content;
 
-              // Strip think/思考 tags
+              // Strip any embedded <think> tags in content field
               c = thinkParser.feed(c);
               if (!c) continue;
 
-              // Normalize spacing across chunk boundaries
-              const normalized = textNormalizer.feed(c);
-              if (!normalized) continue;
+              // Identity wrap on this chunk
+              c = wrapContent(c);
+              if (!c) continue;
 
-              // Accumulate — we wrap the full content at [DONE] so
-              // word-boundary splits across chunks can't break regex matches
-              contentAccumulator += normalized;
+              emit(makeChunk({ content: c }, null));
+            }
+
+            // ── Thinking field (some providers use this instead of reasoning_content) ──
+            if (hasReasoning && delta.thinking != null && REASONING_MODE === 'passthrough') {
+              let t = delta.thinking;
+              if (t) {
+                t = wrapReasoning(t);
+                if (t) {
+                  if (!reasoningHeaderSent) {
+                    t = 'Model: Void V1 Flash\n\n' + t;
+                    reasoningHeaderSent = true;
+                  }
+                  emit(makeChunk({ reasoning_content: t }, null));
+                }
+              }
+            }
+
+            // Finish reason chunk
+            if (choice.finish_reason) {
+              emit(makeChunk({}, choice.finish_reason));
             }
           }
         }
       } catch (e) {
-        // Stream error
+        // Stream read error - close cleanly
       } finally {
         if (!doneSent) controller.enqueue(encoder.encode(SSE.done()));
         try { controller.close(); } catch (_) {}
