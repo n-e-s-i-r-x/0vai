@@ -90,6 +90,13 @@ const IDENTITY_REPLACEMENTS = [
   [/\bDeepSeek's\b/gi, "Void's"],
   [/\bDeepSeek\b/gi, 'Void V1 Flash'],
 
+  // ══ DeepSeek model architecture suffixes (R1-Distill etc leak after "DeepSeek" is replaced) ══
+  // e.g. upstream name "deepseek-r1-distill-qwen-14b" -> after DeepSeek replace: "Void V1 Flash-r1-distill-qwen-14b"
+  [/-R1-Distill(?:-[A-Za-z0-9]+)*/gi, ''],
+  [/R1-Distill(?:-[A-Za-z0-9]+)*/gi, ''],
+  // Generic model-size/variant suffixes that can trail after a replaced name
+  [/-(?:Distill|Coder|Chat|Instruct|Preview|Turbo|Mini|Nano|Fast|Ultra|Plus|Pro|Max)(?:-[A-Za-z0-9]+)*/gi, ''],
+
   // ══ xAI / Grok ══
   [/\bI(?:'m| am)\s+Grok\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:made|built|created|developed)\s+by\s+xAI\b/gi, "I'm Void V1 Flash"],
@@ -291,8 +298,20 @@ export function wrapContent(text) {
     /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
     /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
+    // DeepSeek R1 distill architecture suffixes
+    /-r1-distill(?:-\w+)*/gi, /\br1-distill\b/gi,
+    // Strip em-dashes and en-dashes that slip through from model output
+    /\u2014/g, /\u2013/g,
   ];
   for (const re of NUKE_CONTENT) result = result.replace(re, 'Void V1 Flash');
+
+  // Strip em dashes and en dashes from model output (model ignores system prompt instruction)
+  result = result.replace(/—/g, ' - ');
+  result = result.replace(/–/g, ' - ');
+
+  // Strip R1-Distill suffixes that survive identity replacement
+  result = result.replace(/-R1-Distill(?:-[A-Za-z0-9]+)*/gi, '');
+  result = result.replace(/R1-Distill(?:-[A-Za-z0-9]+)*/gi, '');
 
   // Clean up double spaces left by removals
   result = result.replace(/ {2,}/g, ' ').trim();
@@ -375,6 +394,7 @@ export function wrapReasoning(text) {
     /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
     /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
+    /-r1-distill(?:-\w+)*/gi, /\br1-distill\b/gi,
   ];
   for (const re of NUKE) result = result.replace(re, 'Void V1 Flash');
 
