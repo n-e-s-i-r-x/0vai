@@ -28,6 +28,9 @@ export default function handler(req) {
     display_name:                'Void V1 Flash',
     description:                 'Advanced high-reasoning model optimized for coding, planning, and complex agent workflows with up to 1M token context and configurable reasoning effort.',
 
+    // ── Type ──
+    type:                        'chat',
+
     // ── Context & limits ──
     context_length:              1000000,
     context_window:              1000000,
@@ -36,6 +39,13 @@ export default function handler(req) {
     max_tokens:                  32000,
 
     // ── Reasoning flags (top-level, all formats tools check) ──
+    // reasoning_effort_default: tools surface a difficulty picker with this pre-selected
+    reasoning_effort_default:    'medium',
+    // forceReasoning: ai-sdk/openai flag — treats this as a reasoning model even with unknown ID
+    forceReasoning:              true,
+    // Anthropic-style thinking flags (Claude Code + tools that check these)
+    thinking:                    true,
+    supports_thinking:           true,
     reasoning:                   true,
     reasoning_effort:            true,
     supports_reasoning_effort:   true,
@@ -52,6 +62,9 @@ export default function handler(req) {
       reasoning_effort:          true,
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS,
       supports_reasoning_effort: true,
+      reasoning_effort_default:  'medium',
+      forceReasoning:            true,
+      thinking:                  true,
       is_moderated:              false,
     },
 
@@ -61,6 +74,9 @@ export default function handler(req) {
       reasoning_effort:          true,
       supports_reasoning_effort: true,
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS,
+      reasoning_effort_default:  'medium',
+      thinking:                  true,
+      supports_thinking:         true,
       tools:                     true,
       tool_choice:               true,
       streaming:                 true,
@@ -92,6 +108,8 @@ export default function handler(req) {
       reasoning_effort:          'true',
       supports_reasoning_effort: 'true',
       reasoning_effort_levels:   REASONING_EFFORT_LEVELS.join(','),
+      reasoning_effort_default:  'medium',
+      thinking:                  'true',
     },
 
     per_request_limits:          null,
