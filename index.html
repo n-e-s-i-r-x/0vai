@@ -1298,7 +1298,7 @@ print(r.json())<button class="ak-code-copy ak-example-copy" onclick="copyCode(th
       <div class="ak-section-title"><span class="ak-section-num">05</span> Reasoning Effort &amp; Tool Compatibility</div>
       <div class="ak-callout" style="border-color:rgba(74,222,128,.12);background:rgba(74,222,128,.03);margin-bottom:14px;">
         <span style="font-size:11.5px;font-weight:700;color:rgba(74,222,128,.8);display:block;margin-bottom:4px;">&#9889; Automatic Reasoning Difficulty</span>
-        <span style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;">Void V1 Flash exposes <code>reasoning_effort</code> natively via the <code>/api/v1/models</code> endpoint. Tools like <strong style="color:rgba(255,255,255,.6);">OpenCode Zen</strong>, <strong style="color:rgba(255,255,255,.6);">Claude Code</strong>, <strong style="color:rgba(255,255,255,.6);">Cursor</strong>, and <strong style="color:rgba(255,255,255,.6);">Windsurf</strong> automatically detect and surface a reasoning difficulty selector &mdash; no manual configuration needed.</span>
+        <span style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;">Void V1 Flash exposes <code>reasoning_effort</code> natively via the <code>/api/v1/models</code> endpoint. Tools like <strong style="color:rgba(255,255,255,.6);">OpenCode Zen</strong>, <strong style="color:rgba(255,255,255,.6);">Claude Code</strong>, <strong style="color:rgba(255,255,255,.6);">Cursor</strong>, and <strong style="color:rgba(255,255,255,.6);">Windsurf</strong> automatically detect and surface a reasoning difficulty selector, no manual configuration needed.</span>
       </div>
       <div class="ak-table" style="margin-bottom:14px;">
         <div class="ak-tr ak-tr-2 ak-th"><div>Level</div><div>Behavior</div></div>
@@ -2807,7 +2807,7 @@ function renderMd(text){
     if(tag==='BLOCKQUOTE'){
       const inner=(node.textContent||'').trim();
       const prefixM=inner.match(/^(note|tip|warning|warn|info|important)[:\s]/i);
-      const icon=prefixM?{note:'ℹ',tip:'💡',warning:'⚠',warn:'⚠',info:'ℹ',important:'⚡'}[prefixM[1].toLowerCase()]||'💬':'💬';
+      const icon=prefixM?{note:'ℹ',tip:'💡',warning:'⚠',warn:'⚠',info:'ℹ',important:''}[prefixM[1].toLowerCase()]||'💬':'💬';
       const callout=document.createElement('div');callout.className='callout';
       const iconEl=document.createElement('span');iconEl.className='callout-icon';iconEl.textContent=icon;
       const body=document.createElement('div');body.className='callout-body';
