@@ -251,8 +251,10 @@ const IDENTITY_REPLACEMENTS = [
 export function wrapContent(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Desquish first so squished tokens from the upstream model can be matched
-  let result = desquish(text);
+  // Only desquish if this chunk looks squished (long runs with no spaces).
+  // Normal streaming chunks are fine — desquishing them would corrupt valid text.
+  const looksSquished = /[a-zA-Z]{20,}/.test(text.replace(/\s/g, ''));
+  let result = looksSquished ? desquish(text) : text;
 
   // Apply all identity replacements
   for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
@@ -332,28 +334,104 @@ function desquish(text) {
   let result = text;
 
   // Insert space before a capital that follows a lowercase letter or digit
-  // "IamVoid" → "I am Void", "developedByVoid" → "developed By Void"
   result = result.replace(/([a-z])([A-Z])/g, '$1 $2');
 
   // Insert space before a capital that follows another capital then lowercase
-  // handles runs like "AIAssistant" → "AI Assistant"
   result = result.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
 
-  // Insert space between letters and digits
-  // Use a lookahead to avoid splitting V1, R1 style version tokens
+  // Insert space between letters and digits — preserve version tokens (V1, R1, etc)
   result = result.replace(/([a-zA-Z])(\d)/g, (_, letter, digit) => {
-    // Preserve version tokens like V1, R1, V2 etc
     if (/^[VRv]$/.test(letter)) return letter + digit;
     return letter + ' ' + digit;
   });
   result = result.replace(/(\d)([a-zA-Z])/g, '$1 $2');
 
-  // Insert space after punctuation (comma, period, semicolon, colon) with no trailing space
-  // "Flash,an" → "Flash, an"  "origin.Therefore" → "origin. Therefore"
+  // Insert space after punctuation with no trailing space
   result = result.replace(/([,;:!?])([^\s\d])/g, '$1 $2');
   result = result.replace(/(\.)([A-Z])/g, '$1 $2');
 
-  // Clean up any double spaces introduced
+  // Split all-lowercase squished runs using greedy longest-word matching.
+  // E.g. "Analyzethe" → "Analyze the", "Usersays" → "User says"
+  // We only attempt this on tokens longer than 9 chars that are all lowercase (or first-cap).
+  const WORDS = new Set([
+    'the','and','for','are','but','not','you','all','can','was','one','our','out','had','her',
+    'his','how','its','let','may','now','off','old','say','see','she','too','use','way','who',
+    'will','with','this','that','from','have','been','they','were','what','when','your','said',
+    'each','which','their','there','about','would','these','other','into','than','then','some',
+    'could','him','time','has','look','two','more','go','no','write','number','people','my',
+    'made','over','did','down','only','way','find','use','many','then','them','write','long',
+    'make','thing','see','him','two','how','its','our','used','word','place','year','live','me',
+    'back','give','most','very','after','thing','tell','why','help','put','must','set','being',
+    'just','take','where','every','found','still','should','between','stand','own','page','got',
+    'earth','need','large','often','hand','high','place','hold','state','without','second',
+    'later','miss','idea','enough','eat','face','watch','far','indian','real','almost','let',
+    'above','girl','sometimes','mountain','cut','young','talk','soon','list','song','leave',
+    'family','body','music','color','stand','sun','questions','fish','area','mark','horse',
+    'birds','problem','complete','room','knew','since','ever','piece','told','usually','didn',
+    'friends','easy','heard','order','red','door','sure','become','top','ship','across','today',
+    'during','short','better','best','however','low','hours','black','products','happened',
+    'whole','measure','remember','early','waves','reached','listen','wind','rock','space','covered',
+    'fast','several','hold','himself','toward','study','five','never','carry','state','once',
+    'book','hear','stop','without','second','later','miss','idea','eat','face',
+    // common reasoning words
+    'user','system','model','response','request','think','plan','analyze','determine','formulate',
+    'refine','state','note','wait','actually','simply','provide','standard','specific','exact',
+    'current','context','content','prompt','message','assistant','question','answer','task',
+    'check','review','craft','ensure','given','since','while','both','each','same','such',
+    'must','also','even','back','well','just','much','know','take','good','need','feel',
+    'keep','point','start','base','apply','send','read','look','work','tell','call','seem',
+    'want','give','show','move','live','play','run','pull','push','pass','hold','turn','open',
+    'close','build','break','clear','clean','store','serve','handle','process','return',
+    'search','match','parse','strip','split','join','emit','flush','stream','chunk','buffer',
+    'block','token','field','value','object','array','string','number','boolean','function',
+    'mode','role','type','name','path','file','code','data','info','list','item','step',
+    'first','last','next','prev','index','count','total','limit','offset','size','length',
+    'input','output','result','error','warning','debug','test','true','false','null',
+  ]);
+
+  function splitLowerRun(token) {
+    // Only attempt tokens that are likely squished (len > 8, mostly lowercase)
+    if (token.length <= 8) return token;
+    if (!/^[a-zA-Z]+$/.test(token)) return token;
+
+    const lower = token.toLowerCase();
+    // DP: find minimum-word segmentation
+    const n = lower.length;
+    const dp = new Array(n + 1).fill(null);
+    dp[0] = [];
+    for (let i = 1; i <= n; i++) {
+      for (let j = Math.max(0, i - 14); j < i; j++) {
+        if (dp[j] === null) continue;
+        const word = lower.slice(j, i);
+        if (word.length >= 3 && WORDS.has(word)) {
+          if (dp[i] === null || dp[j].length + 1 < dp[i].length) {
+            dp[i] = [...dp[j], token.slice(j, i)];
+          }
+        }
+      }
+    }
+    // Only use the split if we covered the whole token
+    if (dp[n] !== null) return dp[n].join(' ');
+    return token;
+  }
+
+  // Apply word-splitter to each whitespace-separated token
+  result = result.split(/(\s+)/).map((part, i) => {
+    // Keep whitespace parts as-is
+    if (i % 2 === 1) return part;
+    // Only attempt word-split on clearly squished tokens (>8 chars, pure alpha)
+    if (/^[A-Z]?[a-z]{8,}$/.test(part)) {
+      const firstCap = /^[A-Z]/.test(part);
+      const split = splitLowerRun(part);
+      if (firstCap && split !== part) {
+        return split.charAt(0).toUpperCase() + split.slice(1);
+      }
+      return split;
+    }
+    return part;
+  }).join('');
+
+  // Clean up double spaces
   result = result.replace(/ {2,}/g, ' ').trim();
 
   return result;
@@ -368,16 +446,6 @@ export function wrapReasoning(text) {
 
   // Step 1: Desquish — insert missing spaces so regex patterns can match
   let result = desquish(text);
-
-  // Step 1b: Strip any lines that are still heavily squished after desquishing.
-  // A line is "squished" if it has very long runs of characters with no spaces
-  // (e.g. "Iamcertainofmyorigin" - all-lowercase runs can't be desquished by regex).
-  // These lines are unreadable garbage — strip them entirely.
-  result = result.split('\n').map(line => {
-    const words = line.trim().split(/\s+/);
-    const hasLongSquishedRun = words.some(w => w.length > 18 && /^[a-z]{10,}/.test(w));
-    return hasLongSquishedRun ? null : line;
-  }).filter(l => l !== null).join('\n');
 
   // Step 2: Strip lines that reference instructions/rules/system prompt
   // OR lines where the model is confusedly questioning its own identity
