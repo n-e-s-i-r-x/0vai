@@ -12,7 +12,7 @@ const MODEL_MAP = {
   '0':         { id: 'deepseek-v4-flash-free',         hasReasoning:false, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   '00':        { id: 'poolside/laguna-xs.2:free',  hasReasoning:true,  hasPromptedThink:false, minTokens:10000 },
   '000':       { id: 'nemotron-3-super-free',           hasReasoning:true,  hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  'V':         { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',        hasReasoning:true, hasPromptedThink:false, minTokens:10000, useOpenCode:false },
+  'V':         { id: 'deepseek-v4-flash-free',        hasReasoning:true, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   'VV':        { id: 'deepseek-v4-flash-free', hasReasoning:true,  hasPromptedThink:false, minTokens:10000, contextWindow:100000, useOpenCode:true },
   'VVV':       { id: 'deepseek-v4-flash-free',      hasReasoning:true,  hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   'humanizer': { id: 'openai/gpt-oss-120b:free',  hasReasoning:false, hasPromptedThink:false, minTokens:10000, temperature:1.5 },
