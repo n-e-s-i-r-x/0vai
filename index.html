@@ -3963,18 +3963,85 @@ function setStopMode(active){
 }
 
 function showErr(msg){const ca=document.getElementById('chat-area');if(!ca)return;document.getElementById('err-row')?.remove();const r=document.createElement('div');r.className='err-row';r.id='err-row';const displayMsg=msg||'Failed to get a response';const isRateLimit=/rate.?limit|slow.?down|busy/i.test(displayMsg);r.innerHTML=`<div class="err-box"><span class="err-msg">${esc(displayMsg)}</span><button class="retry-btn" onclick="retryLast()">Retry</button></div>`;ca.appendChild(r);if(S.settings.autoscroll)scrollBot();if(isRateLimit){const retryDelay=8000;const countdown=r.querySelector('.err-msg');let secs=Math.round(retryDelay/1000);const iv=setInterval(()=>{secs--;if(countdown&&document.getElementById('err-row'))countdown.textContent=displayMsg+' Retrying in '+secs+'s…';if(secs<=0){clearInterval(iv);if(document.getElementById('err-row'))retryLast();}},1000);r._retryIv=iv;}}
-function sendMsg(){
+async function sendMsg(){
   try{
     if(S.busy){
       S.busy=false;
       setStopMode(false);
     }
     const inp=document.getElementById('user-input');
-    if(!inp||!inp.value.trim()) return;
+    if(!inp||(!inp.value.trim()&&!_attachedFiles.length)) return;
     let c=curConvo(); if(!c) c=ensureConvo();
     if(!c) return;
     const text=inp.value.trim(); inp.value=''; autoGrow(inp);
     const icm=modeOn('code'); const aiId='ai'+uid();
+
+    // Read attached files
+    const files = _attachedFiles.slice();
+    _attachedFiles = [];
+    const tray = document.getElementById('file-tray');
+    if(tray){tray.classList.remove('show');tray.innerHTML='';}
+
+    if(files.length){
+      let fileTexts = [];
+      let visionParts = [];
+      let fileNames = [];
+      let hasImage = false;
+
+      for(const f of files){
+        fileNames.push(f.name);
+        const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|svg|tiff)$/i.test(f.name);
+        if(isImage){
+          hasImage = true;
+          const b64 = await new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject('Failed to read '+f.name);
+            fr.readAsDataURL(f);
+          });
+          visionParts.push({type:'image_url', image_url:{url:b64}});
+        }else{
+          const t = await new Promise((resolve) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => resolve('');
+            fr.readAsText(f);
+          });
+          if(t) fileTexts.push('=== '+f.name+' ===\n'+t);
+        }
+      }
+
+      let content = text;
+      if(fileTexts.length) content = (text ? text+'\n\n' : '') + fileTexts.join('\n\n');
+
+      const msg = {role:'user', content, files:fileNames};
+      if(hasImage){
+        const parts = [];
+        if(text) parts.push({type:'text', text});
+        parts.push(...visionParts);
+        msg.visionPayload = parts;
+        msg.content = text || ('[Attached: '+fileNames.join(', ')+']');
+      }
+      if(!hasImage && fileTexts.length) msg.modelContent = content;
+
+      c.msgs.push(msg);
+      if(!c.title) c.title = mkTitle(text || fileNames.join(', '));
+      saveStore();
+      const msgIdx=c.msgs.length-1;
+      const userHtml=buildMsg(c.msgs[msgIdx],msgIdx);
+      const ca=document.getElementById('chat-area');
+      if(ca){
+        const es=ca.querySelector('#empty-state'); if(es) es.remove();
+        const tmp=document.createElement('div');tmp.innerHTML=userHtml;
+        const userRow=tmp.firstElementChild;
+        if(userRow) ca.appendChild(userRow);
+      }
+      if(S.settings.speedTimer) startSpeedTimer();
+      if(modeOn('image')){ appendPending(aiId,icm); generateImage(aiId,text||fileNames.join(', '),c); return; }
+      appendPending(aiId,icm); generate(c,aiId,null,text||content,modeOn('web'),false,icm);
+      return;
+    }
+
     c.msgs.push({role:'user',content:text});
     if(!c.title){c.title=mkTitle(text);}
     saveStore();
