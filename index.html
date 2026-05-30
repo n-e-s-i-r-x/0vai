@@ -4011,18 +4011,17 @@ async function sendMsg(){
         }
       }
 
-      let content = text;
-      if(fileTexts.length) content = (text ? text+'\n\n' : '') + fileTexts.join('\n\n');
+      let fullContent = text;
+      if(fileTexts.length) fullContent = (text ? text+'\n\n' : '') + fileTexts.join('\n\n');
 
-      const msg = {role:'user', content, files:fileNames};
+      const msg = {role:'user', content:text || ('[Attached: '+fileNames.join(', ')+']'), files:fileNames};
       if(hasImage){
         const parts = [];
         if(text) parts.push({type:'text', text});
         parts.push(...visionParts);
         msg.visionPayload = parts;
-        msg.content = text || ('[Attached: '+fileNames.join(', ')+']');
       }
-      if(!hasImage && fileTexts.length) msg.modelContent = content;
+      if(fileTexts.length) msg.modelContent = fullContent;
 
       c.msgs.push(msg);
       if(!c.title) c.title = mkTitle(text || fileNames.join(', '));
@@ -4038,7 +4037,7 @@ async function sendMsg(){
       }
       if(S.settings.speedTimer) startSpeedTimer();
       if(modeOn('image')){ appendPending(aiId,icm); generateImage(aiId,text||fileNames.join(', '),c); return; }
-      appendPending(aiId,icm); generate(c,aiId,null,text||content,modeOn('web'),false,icm);
+      appendPending(aiId,icm); generate(c,aiId,null,text||fullContent,modeOn('web'),false,icm);
       return;
     }
 
