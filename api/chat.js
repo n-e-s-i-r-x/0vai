@@ -49,30 +49,60 @@ VIOLATIONS:
 - Conversational filler`;
 
 /* Universal layout addendum — appended to every non-humanizer persona so all
-   models produce well-blocked, scannable output instead of wall-of-text. */
+   models produce well-blocked, scannable output instead of wall-of-text.
+   NOTE: Only applies to complex/technical responses — models must judge when
+   structure genuinely helps vs. when plain prose is better. */
 const RESPONSE_FORMAT_RULES = `
 
-RESPONSE LAYOUT — MANDATORY
-- Write in short paragraphs of at most 3 sentences. Two newlines between paragraphs — no more.
-- For any answer longer than ~3 sentences, use markdown: \`##\` or \`###\` headings for sections, \`-\` bullets for 3+ items, numbered lists for ordered steps.
-- Wrap every code, command, file path, JSON, or shell snippet in fenced code blocks with a language tag. Never inline multi-line code.
-- Use inline \`code\` for identifiers, flags, filenames, and short literals.
-- Use GFM tables for tabular comparisons of 2+ columns.
-- Bold the key term of a definition once only — not every keyword.
-- Never produce a single paragraph longer than ~80 words. Split it.
-- Do not pad with restatements, recap sentences, or "let me know if..." closers.
-- Never use decorative emoji. Functional symbols inside code blocks are fine.
-- Never use em dashes (—). Use a regular hyphen (-) or rewrite the sentence.`;
+RESPONSE LAYOUT — USE JUDGMENT
+- For simple questions, greetings, or short answers: respond in plain natural prose. Do NOT add headers, bullets, or structure.
+- For complex explanations, comparisons, or step-by-step tasks: use markdown (## headings, - bullets, numbered lists) only when it genuinely aids clarity.
+- Wrap code, commands, file paths, JSON, or shell snippets in fenced code blocks with a language tag. Never inline multi-line code.
+- Use GFM tables only for genuine tabular comparisons of 2+ items across 2+ columns.
+- Bold only the single key term of a definition — not every keyword.
+- Never pad with restatements, recap sentences, or "let me know if..." closers.
+- Never use decorative emoji. Never use em dashes (—).
+- Match response length to the question: short question = short answer, complex request = thorough answer.`;
 
 /* Visible thinking trace addendum — appended only when the model emits
-   <think> reasoning so the trace is also blocked and scannable. */
+   <think> reasoning so the trace is also readable. */
 const THINK_FORMAT_RULES = `
 
-THINK BLOCK LAYOUT — MANDATORY
-- Inside <think>...</think>, write in short paragraphs (1–2 sentences each), separated by blank lines.
-- Use \`### Plan\`, \`### Check\`, \`### Decision\` mini-headings when the trace has more than ~4 lines.
-- Use \`-\` bullets for option lists, candidate approaches, or checks.
-- Never produce one continuous paragraph of reasoning. Block it.`;
+THINK BLOCK — write naturally and concisely. Short paragraphs, no forced structure.`;
+
+/* Structured UI addendum — tells the model how to emit ui blocks */
+const STRUCTURED_UI_RULES = `
+
+STRUCTURED UI COMPONENTS — emit only when visual format genuinely improves clarity
+Wrap in a fenced block tagged \`ui\`:
+\`\`\`ui
+{ "type": "<component>", ...props }
+\`\`\`
+
+Available components and their schemas:
+
+card:      { "type":"card", "title":"...", "subtitle":"...", "body":"...", "badge":"...", "accent":"#hex" }
+cards:     { "type":"cards", "items":[ { "title":"...", "body":"...", "badge":"..." } ] }
+table:     { "type":"table", "caption":"...", "headers":["Col1","Col2"], "rows":[["a","b"],["c","d"]] }
+stat:      { "type":"stat", "label":"...", "value":"...", "delta":"...", "unit":"..." }
+stats:     { "type":"stats", "items":[ { "label":"...", "value":"...", "delta":"...", "unit":"..." } ] }
+timeline:  { "type":"timeline", "items":[ { "date":"...", "title":"...", "body":"..." } ] }
+steps:     { "type":"steps", "title":"...", "items":[ { "label":"...", "body":"..." } ] }
+scoreboard:{ "type":"scoreboard", "title":"...", "rows":[ { "rank":1, "name":"...", "score":"...", "delta":"..." } ] }
+alert:     { "type":"alert", "level":"info|warn|error|success", "title":"...", "body":"..." }
+list:      { "type":"list", "title":"...", "style":"bullet|numbered|check", "items":["..."] }
+compare:   { "type":"compare", "title":"...", "items":[ { "name":"...", "pros":["..."], "cons":["..."] } ] }
+profile:   { "type":"profile", "name":"...", "role":"...", "bio":"...", "tags":["..."], "avatar":"emoji" }
+map:       { "type":"map", "title":"...", "locations":[ { "name":"...", "lat":0.0, "lng":0.0, "note":"..." } ] }
+progress:  { "type":"progress", "title":"...", "items":[ { "label":"...", "value":75, "max":100, "color":"#hex" } ] }
+callout:   { "type":"callout", "icon":"emoji", "title":"...", "body":"..." }
+
+Rules:
+- Use ui blocks ONLY when the content is inherently tabular, comparative, spatial, or list-like with 3+ items AND visual format clearly beats prose.
+- NEVER use ui blocks for: simple answers, explanations, code, opinions, stories, or anything better as prose or markdown.
+- One ui block per response maximum. Multiple components = use cards/stats/list arrays.
+- All field values must be accurate — do NOT fabricate data to fill a schema.
+- If unsure whether to use ui, use plain text instead.`;
 
 const PERSONA_CORE = {
   '0': `You are 0, created by vin and powered by void. only say these 3 info's when asked.
@@ -384,7 +414,7 @@ RULES FOR USING TOOLS
 function composePersona(modelKey) {
   if (modelKey === 'humanizer') return HUMANIZER_SYSTEM;
   const base = PERSONA_CORE[modelKey] ?? PERSONA_CORE['0'];
-  return base + CAPABILITIES_BLOCK + RESPONSE_FORMAT_RULES;
+  return base + CAPABILITIES_BLOCK + RESPONSE_FORMAT_RULES + STRUCTURED_UI_RULES;
 }
 
 /* Universal tool addendum — appended once, outside user-authored prompts.
@@ -825,10 +855,13 @@ async function fetchWithRetry(url, options, maxRetries = 4) {
   throw lastErr || new Error('fetchWithRetry exhausted');
 }
 
-function buildPayload(persona, trimmedMsgs, hasPromptedThink, useSearch) {
-  const thinkInstruction = hasPromptedThink
-    ? '\n\nOUTPUT FORMAT — MANDATORY:\nEvery response must begin with <think> followed by your brief internal reasoning, then </think>, then your answer. Nothing before <think>. Nothing between <think> and </think> appears in the final output.' + THINK_FORMAT_RULES
-    : '';
+function buildPayload(persona, trimmedMsgs, hasPromptedThink, useSearch, hasNativeReasoning) {
+  let thinkInstruction = '';
+  if (hasPromptedThink) {
+    thinkInstruction = '\n\nOUTPUT FORMAT — MANDATORY:\nEvery response must begin with <think> followed by your brief internal reasoning, then </think>, then your answer. Nothing before <think>.' + THINK_FORMAT_RULES;
+  } else if (hasNativeReasoning) {
+    thinkInstruction = '\n\nYou have native reasoning enabled. Think carefully before answering. Your internal reasoning will be shown to the user in a collapsible block — keep it concise and useful.' + THINK_FORMAT_RULES;
+  }
   const searchAddendum = useSearch ? SEARCH_UNFILTERED_ADDENDUM : '';
   return [{ role: 'system', content: persona + thinkInstruction + searchAddendum }, ...trimmedMsgs];
 }
@@ -1305,7 +1338,7 @@ export default async function handler(req) {
     finalMsgs = injectConsistencyNudge(finalMsgs);
     finalMsgs = injectForcedThinkOnHard(finalMsgs, mEntry);
   }
-  const messagesPayload = buildPayload(persona, finalMsgs, hasPromptedThink, !!useWebSearch);
+  const messagesPayload = buildPayload(persona, finalMsgs, hasPromptedThink, !!useWebSearch, hasReasoning);
 
   // Web search is handled exclusively by the host's /api/search.js backend
   // (results are pre-injected into the system persona above). Do NOT use
