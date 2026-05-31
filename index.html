@@ -306,7 +306,7 @@ body.themed #input-area{border-top-color:var(--accent-border);}
 .input-tools{display:flex;align-items:center;gap:6px;padding:8px 10px 4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex-shrink:0}
 .input-tools::-webkit-scrollbar{display:none}
 .input-row{display:flex;align-items:flex-end;padding:4px 6px 6px 8px;gap:6px}
-#user-input{flex:1;color:#fff;font-size:15px;line-height:1.4;resize:none;max-height:140px;min-height:32px;padding:7px 4px;overflow-y:auto;background:transparent}
+#user-input{flex:1;width:100%;color:#fff;font-size:15px;line-height:1.4;resize:none;max-height:140px;min-height:32px;padding:7px 4px;overflow-y:auto;background:transparent;box-sizing:border-box;}
 #user-input::placeholder{color:#444}
 .send-btn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,transform .1s,box-shadow .15s;border:none}
 .send-btn:active{transform:scale(.9)}
@@ -365,6 +365,63 @@ body.themed .attach-btn{color:var(--accent);opacity:.6;}
 body.themed .attach-btn:active{opacity:1;background:var(--accent-subtle);}
 .attach-btn.has-file{color:#4a9eff;}
 body.themed .attach-btn.has-file{color:var(--accent);opacity:1;}
+
+/* ── THINK TOGGLE BUTTON ── */
+#think-toggle-btn{height:28px;padding:0 10px;border-radius:7px;background:#1a1a1a;border:none;outline:none;color:#666;font-size:11px;font-weight:700;letter-spacing:.4px;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,transform .1s;flex-shrink:0;}
+#think-toggle-btn:active{transform:scale(.93);}
+#think-toggle-btn.active{background:#2a1a40;color:#a855f7;}
+body.themed #think-toggle-btn{background:var(--accent-subtle);color:var(--accent);opacity:.6;}
+body.themed #think-toggle-btn.active{opacity:1;background:var(--accent-subtle);}
+
+/* ── THREE-DOTS MENU ── */
+.three-dots-btn{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666;flex-shrink:0;transition:background .15s,color .15s,transform .1s;}
+.three-dots-btn:active{background:#1a1a1a;color:#fff;transform:scale(.9);}
+body.themed .three-dots-btn{color:var(--accent);opacity:.6;}
+body.themed .three-dots-btn:active{opacity:1;background:var(--accent-subtle);}
+.three-dots-btn.menu-open{color:#fff;background:#1a1a1a;}
+body.themed .three-dots-btn.menu-open{color:var(--accent);opacity:1;background:var(--accent-subtle);}
+
+#dots-menu-popup{position:fixed;z-index:9999;background:#0d0d0d;border:1px solid #222;border-radius:14px;padding:6px;width:200px;box-shadow:0 16px 48px rgba(0,0,0,.95);display:none;pointer-events:auto;transition:border-color .3s;}
+body.themed #dots-menu-popup{border-color:var(--accent-border);}
+#dots-menu-popup.open{display:block;animation:dotsMenuPop .18s cubic-bezier(.34,1.56,.64,1);}
+@keyframes dotsMenuPop{from{opacity:0;transform:scale(.88) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes dotsMenuClose{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.88) translateY(8px)}}
+#dots-menu-popup .dm-head{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555;padding:6px 10px 8px;}
+body.themed #dots-menu-popup .dm-head{color:var(--accent);opacity:.5;}
+.dm-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s;font-size:13px;color:#aaa;font-weight:600;}
+.dm-item:active{opacity:.7;}
+.dm-item:hover{background:#141414;}
+.dm-item.active{background:#141414;border-color:#2a2a2a;color:#fff;}
+body.themed .dm-item.active{border-color:var(--accent-border);background:var(--accent-subtle);color:var(--accent);}
+.dm-item-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:.7;}
+.dm-item.active .dm-item-icon{opacity:1;}
+
+/* ── REASONING LEVEL BUTTON ── */
+#reasoning-btn{height:30px;padding:0 8px;border-radius:8px;display:flex;align-items:center;gap:4px;flex-shrink:0;background:transparent;border:none;outline:none;color:#666;font-size:11px;font-weight:700;letter-spacing:.4px;white-space:nowrap;transition:color .2s,transform .2s;cursor:pointer;}
+#reasoning-btn:active{color:#aaa;}
+body.themed #reasoning-btn{color:var(--accent);opacity:.6;}
+body.themed #reasoning-btn:active{opacity:1;}
+#reasoning-btn.menu-open{transform:translateY(-3px);color:#fff;}
+body.themed #reasoning-btn.menu-open{color:var(--accent);opacity:1;}
+#reasoning-btn .rb-chevron{font-size:10px;transition:transform .2s;}
+#reasoning-btn.menu-open .rb-chevron{transform:rotate(180deg);}
+#reasoning-btn[style*="display:none"],#reasoning-btn[style*="display: none"]{display:none!important;}
+
+#reasoning-menu-popup{position:fixed;z-index:9999;background:#0d0d0d;border:1px solid #222;border-radius:14px;padding:6px;width:240px;box-shadow:0 16px 48px rgba(0,0,0,.95);display:none;pointer-events:auto;transition:border-color .3s;}
+body.themed #reasoning-menu-popup{border-color:var(--accent-border);}
+#reasoning-menu-popup.open{display:block;animation:dotsMenuPop .18s cubic-bezier(.34,1.56,.64,1);}
+#reasoning-menu-popup .rm-head{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555;padding:6px 10px 8px;}
+body.themed #reasoning-menu-popup .rm-head{color:var(--accent);opacity:.5;}
+.rm-item{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s;}
+.rm-item:active{opacity:.7;}
+.rm-item:hover{background:#141414;}
+.rm-item.selected{background:#141414;border-color:#2a2a2a;}
+body.themed .rm-item.selected{border-color:var(--accent-border);background:var(--accent-subtle);}
+.rm-item-name{font-size:12px;font-weight:700;color:#ddd;margin-bottom:2px;}
+.rm-item.selected .rm-item-name{color:#fff;}
+body.themed .rm-item.selected .rm-item-name{color:var(--accent);}
+.rm-item-desc{font-size:10px;color:#555;line-height:1.35;}
+.rm-item.selected .rm-item-desc{color:#777;}
 /* file chips inside user bubble */
 .u-file-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;}
 .u-file-chip{display:inline-flex;align-items:center;gap:4px;background:#111;border:1px solid #2a2a2a;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:#777;letter-spacing:.4px;text-transform:uppercase;}
@@ -617,70 +674,28 @@ body.themed .speed-timer {
   <div id="file-parse-progress"></div>
   <div id="input-area">
     <div class="input-box" id="input-box">
-      <div class="input-tools">
-        <button class="mode-btn" id="think-btn" onclick="toggleMode('think')" title="Real model reasoning (only on capable models)">
-          <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-            <rect x="2" y="0" width="4" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/>
-            <rect x="0" y="2" width="1" height="3"/><rect x="7" y="2" width="1" height="3"/>
-            <rect x="3" y="2" width="2" height="1"/><rect x="3" y="4" width="2" height="1"/>
-            <rect x="1" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/>
-            <rect x="2" y="6" width="4" height="1"/>
-            <rect x="3" y="7" width="2" height="1"/>
-          </svg>
-          Think
-        </button>
-        <button class="mode-btn" id="web-btn" onclick="toggleMode('web')">
-          <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-            <rect x="3" y="0" width="2" height="1"/><rect x="2" y="1" width="4" height="1"/>
-            <rect x="1" y="2" width="6" height="1"/><rect x="0" y="3" width="8" height="1"/>
-            <rect x="1" y="4" width="6" height="1"/><rect x="2" y="5" width="4" height="1"/>
-            <rect x="3" y="6" width="2" height="1"/>
-            <rect x="0" y="3" width="1" height="2"/><rect x="7" y="3" width="1" height="2"/>
-            <rect x="3" y="0" width="2" height="7"/>
-          </svg>
-          Search
-        </button>
-        <button class="mode-btn" id="code-btn" onclick="toggleMode('code')">
-          <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-            <rect x="2" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/>
-            <rect x="0" y="3" width="1" height="2"/><rect x="1" y="5" width="1" height="1"/>
-            <rect x="2" y="6" width="1" height="1"/>
-            <rect x="5" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/>
-            <rect x="7" y="3" width="1" height="2"/><rect x="6" y="5" width="1" height="1"/>
-            <rect x="5" y="6" width="1" height="1"/>
-            <rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/>
-          </svg>
-          Code
-        </button>
-        <button class="mode-btn" id="image-btn" onclick="toggleMode('image')">
-          <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-            <rect x="0" y="1" width="8" height="1"/><rect x="0" y="6" width="8" height="1"/>
-            <rect x="0" y="1" width="1" height="6"/><rect x="7" y="1" width="1" height="6"/>
-            <rect x="2" y="3" width="1" height="1"/>
-            <rect x="1" y="5" width="2" height="1"/><rect x="2" y="4" width="1" height="1"/>
-            <rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/>
-            <rect x="5" y="3" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/>
-            <rect x="3" y="5" width="4" height="1"/>
-          </svg>
-          Image
-        </button>
-        <button class="mode-btn" id="humanizer-btn" onclick="toggleMode('humanizer')">
-          <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-            <rect x="3" y="0" width="2" height="1"/>
-            <rect x="2" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/>
-            <rect x="1" y="2" width="1" height="2"/><rect x="6" y="2" width="1" height="2"/>
-            <rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/>
-            <rect x="1" y="5" width="6" height="1"/>
-            <rect x="2" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/>
-            <rect x="3" y="7" width="2" height="1"/>
-          </svg>
-          Humanizer
-        </button>
-
+      <!-- Textarea is the primary focus, above all action buttons -->
+      <div style="padding:8px 10px 0;">
+        <textarea id="user-input" placeholder="Message 0..." rows="1" oninput="autoGrow(this)" onkeydown="onKey(event)" style="width:100%;box-sizing:border-box;"></textarea>
       </div>
+      <!-- Action buttons row below textarea -->
       <div class="input-row">
         <button class="model-btn" id="model-btn" onclick="openModelPicker(event)">0</button>
-        <textarea id="user-input" placeholder="Message 0..." rows="1" oninput="autoGrow(this)" onkeydown="onKey(event)"></textarea>
+        <button id="think-toggle-btn" onclick="toggleMode('think')" style="display:none;" title="Toggle thinking">Think</button>
+        <button id="reasoning-btn" onclick="openReasoningMenu(event)" style="display:none;" title="Reasoning level">
+          <span id="reasoning-btn-label">Default</span>
+          <span class="rb-chevron">›</span>
+        </button>
+        <div style="flex:1;"></div>
+        <!-- Three-dots button -->
+        <button class="three-dots-btn" id="three-dots-btn" onclick="openDotsMenu(event)" title="More options">
+          <svg width="14" height="4" viewBox="0 0 14 4" fill="currentColor" shape-rendering="crispEdges">
+            <rect x="0" y="1" width="2" height="2"/>
+            <rect x="6" y="1" width="2" height="2"/>
+            <rect x="12" y="1" width="2" height="2"/>
+          </svg>
+        </button>
+        <!-- Attach button -->
         <button class="send-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
           <svg width="16" height="16" viewBox="0 0 12 12" fill="currentColor" shape-rendering="crispEdges">
             <rect x="1" y="4" width="10" height="4"/>
@@ -705,6 +720,85 @@ body.themed .speed-timer {
     </div>
     <div id="image-notice"><span id="img-limit-display"></span></div>
     <div id="humanizer-hint" style="display:none;text-align:center;font-size:10.5px;color:#fff;padding:6px 14px 0;line-height:1.5;opacity:0.7">Paste your text and send it will be humanized automatically.</div>
+  </div>
+
+  <!-- Three-dots floating menu -->
+  <div id="dots-menu-popup">
+    <div class="dm-head">Options</div>
+    <div class="dm-item" id="dm-web" onclick="dmToggle('web')">
+      <span class="dm-item-icon">
+        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
+          <rect x="3" y="0" width="2" height="1"/><rect x="2" y="1" width="4" height="1"/>
+          <rect x="1" y="2" width="6" height="1"/><rect x="0" y="3" width="8" height="1"/>
+          <rect x="1" y="4" width="6" height="1"/><rect x="2" y="5" width="4" height="1"/>
+          <rect x="3" y="6" width="2" height="1"/>
+          <rect x="0" y="3" width="1" height="2"/><rect x="7" y="3" width="1" height="2"/>
+          <rect x="3" y="0" width="2" height="7"/>
+        </svg>
+      </span>Search
+    </div>
+    <div class="dm-item" id="dm-code" onclick="dmToggle('code')">
+      <span class="dm-item-icon">
+        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
+          <rect x="2" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/>
+          <rect x="0" y="3" width="1" height="2"/><rect x="1" y="5" width="1" height="1"/>
+          <rect x="2" y="6" width="1" height="1"/>
+          <rect x="5" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/>
+          <rect x="7" y="3" width="1" height="2"/><rect x="6" y="5" width="1" height="1"/>
+          <rect x="5" y="6" width="1" height="1"/>
+          <rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/>
+        </svg>
+      </span>Code
+    </div>
+    <div class="dm-item" id="dm-image" onclick="dmToggle('image')">
+      <span class="dm-item-icon">
+        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
+          <rect x="0" y="1" width="8" height="1"/><rect x="0" y="6" width="8" height="1"/>
+          <rect x="0" y="1" width="1" height="6"/><rect x="7" y="1" width="1" height="6"/>
+          <rect x="2" y="3" width="1" height="1"/>
+          <rect x="1" y="5" width="2" height="1"/><rect x="2" y="4" width="1" height="1"/>
+          <rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/>
+          <rect x="5" y="3" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/>
+          <rect x="3" y="5" width="4" height="1"/>
+        </svg>
+      </span>Image
+    </div>
+    <div class="dm-item" id="dm-humanizer" onclick="dmToggle('humanizer')">
+      <span class="dm-item-icon">
+        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
+          <rect x="3" y="0" width="2" height="1"/>
+          <rect x="2" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/>
+          <rect x="1" y="2" width="1" height="2"/><rect x="6" y="2" width="1" height="2"/>
+          <rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/>
+          <rect x="1" y="5" width="6" height="1"/>
+          <rect x="2" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/>
+          <rect x="3" y="7" width="2" height="1"/>
+        </svg>
+      </span>Humanizer
+    </div>
+  </div>
+
+  <!-- Reasoning level floating menu -->
+  <div id="reasoning-menu-popup">
+    <div class="rm-head">Reasoning Level</div>
+    <div class="rm-item selected" id="rm-default" onclick="selectReasoningLevel('default')">
+      <div><div class="rm-item-name">Default</div><div class="rm-item-desc">Balanced reasoning. Good for most tasks.</div></div>
+    </div>
+    <div class="rm-item" id="rm-low" onclick="selectReasoningLevel('low')">
+      <div><div class="rm-item-name">Low</div><div class="rm-item-desc">Minimal reasoning. Fastest, best for simple Q&A.</div></div>
+    </div>
+    <div class="rm-item" id="rm-medium" onclick="selectReasoningLevel('medium')">
+      <div><div class="rm-item-name">Medium</div><div class="rm-item-desc">Moderate depth. Good balance of speed and quality.</div></div>
+    </div>
+    <div class="rm-item" id="rm-high" onclick="selectReasoningLevel('high')">
+      <div><div class="rm-item-name">High</div><div class="rm-item-desc">Deep reasoning. Best for complex code &amp; math.</div></div>
+    </div>
+    <div class="rm-item" id="rm-rapid" onclick="selectReasoningLevel('rapid')">
+      <div><div class="rm-item-name">Rapid</div><div class="rm-item-desc">Quick structured thinking. Speed over depth.</div></div>
+    </div>
+    <div class="rm-item" id="rm-max" onclick="selectReasoningLevel('max')">
+      <div><div class="rm-item-name">Max</div><div class="rm-item-desc">Maximum effort. Slowest, highest quality.</div></div>
+    </div>
   </div>
 </div>
 
@@ -3013,6 +3107,135 @@ function applyModeButtons(c){
     if(modeOn('humanizer')){hzb.style.borderColor='#fff';hzb.style.color='#fff';hzb.style.background='rgba(255,255,255,0.07)';}
     else{hzb.style.borderColor='#2a2a2a';hzb.style.color='#555';hzb.style.background='transparent';}
   }
+  // Sync dots menu items
+  const modeMap={web:'dm-web',code:'dm-code',image:'dm-image',humanizer:'dm-humanizer'};
+  for(const[mode,id] of Object.entries(modeMap)){
+    const el=document.getElementById(id);if(!el)continue;
+    if(modeOn(mode))el.classList.add('active');else el.classList.remove('active');
+  }
+}
+
+/* ─── THREE-DOTS FLOATING MENU ─── */
+let _dotsMenuOpen=false;
+function openDotsMenu(e){
+  e.stopPropagation();
+  const popup=document.getElementById('dots-menu-popup');
+  const btn=document.getElementById('three-dots-btn');
+  if(!popup)return;
+  if(_dotsMenuOpen){closeDotsMenu();return;}
+  const rect=btn.getBoundingClientRect();
+  const popW=200;let left=rect.right-popW,bottom=window.innerHeight-rect.top+8;
+  if(left<8)left=8;if(left+popW>window.innerWidth-8)left=window.innerWidth-popW-8;
+  popup.style.left=left+'px';popup.style.bottom=bottom+'px';popup.style.top='auto';
+  popup.style.display='block';popup.style.animation='dotsMenuPop .18s cubic-bezier(.34,1.56,.64,1)';
+  _dotsMenuOpen=true;
+  btn.classList.add('menu-open');
+  // Apply capability gating to dm items
+  const caps=(typeof modelCaps==='function')?modelCaps():(typeof CAPS!=='undefined'?(CAPS[S.model]||CAPS['0']):null);
+  if(caps){
+    const modeGate={web:'dm-web',code:'dm-code',image:'dm-image',humanizer:'dm-humanizer'};
+    for(const[cap,id] of Object.entries(modeGate)){
+      const el=document.getElementById(id);if(!el)continue;
+      const ok=caps[cap]!==false;
+      el.style.opacity=ok?'':'0.4';el.style.pointerEvents=ok?'':'none';
+    }
+  }
+  syncDmItems();
+}
+function closeDotsMenu(){
+  const popup=document.getElementById('dots-menu-popup');const btn=document.getElementById('three-dots-btn');
+  if(!popup||!_dotsMenuOpen)return;
+  popup.style.animation='dotsMenuClose .15s cubic-bezier(.4,0,.2,1) forwards';
+  setTimeout(()=>{popup.style.display='none';popup.style.animation='';},150);
+  _dotsMenuOpen=false;if(btn)btn.classList.remove('menu-open');
+}
+function syncDmItems(){
+  const modes=['web','code','image','humanizer'];
+  modes.forEach(m=>{const el=document.getElementById('dm-'+m);if(!el)return;
+    if(modeOn(m))el.classList.add('active');else el.classList.remove('active');});
+}
+function dmToggle(mode){
+  toggleMode(mode);syncDmItems();
+}
+document.addEventListener('click',function(e){
+  if(_dotsMenuOpen){
+    const popup=document.getElementById('dots-menu-popup');
+    const btn=document.getElementById('three-dots-btn');
+    if(popup&&!popup.contains(e.target)&&e.target!==btn&&!btn?.contains(e.target))closeDotsMenu();
+  }
+  if(_reasoningMenuOpen){
+    const popup=document.getElementById('reasoning-menu-popup');
+    const btn=document.getElementById('reasoning-btn');
+    if(popup&&!popup.contains(e.target)&&e.target!==btn&&!btn?.contains(e.target))closeReasoningMenu();
+  }
+});
+
+/* ─── REASONING LEVEL MENU ─── */
+const REASONING_LEVELS={
+  default:{ label:'Default', effort:'medium' },
+  low:    { label:'Low',     effort:'low'    },
+  medium: { label:'Medium',  effort:'medium' },
+  high:   { label:'High',    effort:'high'   },
+  rapid:  { label:'Rapid',   effort:'low'    },
+  max:    { label:'Max',     effort:'high'   },
+};
+let _reasoningMenuOpen=false;
+
+function updateReasoningBtn(){
+  const btn=document.getElementById('reasoning-btn');
+  const thinkBtn=document.getElementById('think-toggle-btn');
+  const caps=(typeof CAPS!=='undefined')?(CAPS[S.model]||CAPS['0']):null;
+  const modelSupportsThink=!!(caps&&caps.think)||(MODELS[S.model]&&MODELS[S.model].hasThink);
+  // Inline think toggle button: show when model supports think, active when on
+  if(thinkBtn){
+    thinkBtn.style.display=modelSupportsThink?'':'none';
+    if(modeOn('think'))thinkBtn.classList.add('active');
+    else thinkBtn.classList.remove('active');
+  }
+  // Reasoning level button: only visible when think is ON
+  const thinkActive=modeOn('think');
+  if(btn){
+    btn.style.display=(modelSupportsThink&&thinkActive)?'':'none';
+    if(modelSupportsThink&&thinkActive){
+      const lbl=document.getElementById('reasoning-btn-label');
+      if(lbl)lbl.textContent=REASONING_LEVELS[S.reasoningLevel]?.label||'Default';
+    }
+  }
+}
+function openReasoningMenu(e){
+  e.stopPropagation();
+  const popup=document.getElementById('reasoning-menu-popup');
+  const btn=document.getElementById('reasoning-btn');
+  if(!popup)return;
+  if(_reasoningMenuOpen){closeReasoningMenu();return;}
+  const rect=btn.getBoundingClientRect();
+  const popW=240;let left=rect.left,bottom=window.innerHeight-rect.top+8;
+  if(left+popW>window.innerWidth-8)left=window.innerWidth-popW-8;if(left<8)left=8;
+  popup.style.left=left+'px';popup.style.bottom=bottom+'px';popup.style.top='auto';
+  popup.style.display='block';popup.style.animation='dotsMenuPop .18s cubic-bezier(.34,1.56,.64,1)';
+  _reasoningMenuOpen=true;btn.classList.add('menu-open');
+  syncReasoningItems();
+}
+function closeReasoningMenu(){
+  const popup=document.getElementById('reasoning-menu-popup');const btn=document.getElementById('reasoning-btn');
+  if(!popup||!_reasoningMenuOpen)return;
+  popup.style.animation='dotsMenuClose .15s cubic-bezier(.4,0,.2,1) forwards';
+  setTimeout(()=>{popup.style.display='none';popup.style.animation='';},150);
+  _reasoningMenuOpen=false;if(btn)btn.classList.remove('menu-open');
+}
+function syncReasoningItems(){
+  for(const level of Object.keys(REASONING_LEVELS)){
+    const el=document.getElementById('rm-'+level);if(!el)continue;
+    if(level===S.reasoningLevel)el.classList.add('selected');else el.classList.remove('selected');
+  }
+}
+function selectReasoningLevel(level){
+  S.reasoningLevel=level;
+  updateReasoningBtn();syncReasoningItems();
+  closeReasoningMenu();
+}
+function getReasoningEffort(){
+  return REASONING_LEVELS[S.reasoningLevel]?.effort||'medium';
 }
 
 const LEAK_LINE_RE=[/^\s*\[[A-Z][^\]]{2,120}\]\s*$/,/---\s*WEB SEARCH RESULTS\s*---/i,/---\s*END SEARCH RESULTS\s*---/i,/\bDIRECT\s*ANSWER\s*:/i,/\[CODE MODE\b/i,/\[Current date and time\]/i,/\[Reasoning context above/i,/\[Continue from where/i,/\[Search complete/i,/<context>|<\/context>/i,/\bYou are (?:0|00|000|V|VV|VVV)\b/,/\bsystem prompt\b/i,/\b(?:my|the) (?:instructions?|rules|role|configuration|behavior list)\b/i];
@@ -3077,7 +3300,7 @@ async function doSearch(q){try{const r=await fetch('/api/search',{method:'POST',
 function buildSearchCtx(sd){if(!sd)return'';let c='\n\nRelevant web information:\n';if(sd.answer)c+='Summary: '+sd.answer+'\n';(sd.results||[]).forEach(r=>{let host='';try{host=new URL(r.url).hostname.replace('www.','');}catch(e){host='';}c+='- '+r.title+(host?' ('+host+')':'')+': '+r.snippet+'\n';});return c;}
 
 /* ─── STATE ─── */
-const S={convos:{},activeId:null,busy:false,abort:null,model:'0',modes:new Set(),settings:{timestamps:false,autoscroll:true,save:true,webSearchAuto:true,speedTimer:false,turboMode:false,longOutput:false,reduceAnimations:false}};
+const S={convos:{},activeId:null,busy:false,abort:null,model:'0',modes:new Set(),reasoningLevel:'default',settings:{timestamps:false,autoscroll:true,save:true,webSearchAuto:true,speedTimer:false,turboMode:false,longOutput:false,reduceAnimations:false}};
 var _attachedFiles = [];
 
 /* ═══ SLASH LINKS – add your shortcuts here ═══ */
@@ -3162,6 +3385,7 @@ function selectModel(key){
       tb.title='Show thinking';
     }
   }
+  updateReasoningBtn();
   applyColors();updateModelDescs();
 }
 function updateModelDescs(){
@@ -3173,7 +3397,7 @@ function updateModelDescs(){
 
 /* ─── MODES ─── */
 /* Buttons disabled while humanizer is active. */
-const HUMANIZER_LOCK_BTNS=['think-btn','web-btn','code-btn','image-btn','attach-btn'];
+const HUMANIZER_LOCK_BTNS=['think-btn','web-btn','code-btn','image-btn','attach-btn','three-dots-btn'];
 function applyHumanizerLock(){
   const on=S.modes&&S.modes.has&&S.modes.has('humanizer');
   HUMANIZER_LOCK_BTNS.forEach(id=>{
@@ -3186,6 +3410,7 @@ function applyHumanizerLock(){
     ['think','web','code','image'].forEach(m=>S.modes.delete(m));
     if(typeof _clearAllFiles==='function')_clearAllFiles();
     const fpp=document.getElementById('file-parse-progress');if(fpp){fpp.classList.remove('show');fpp.textContent='';}
+    if(typeof updateReasoningBtn==='function')updateReasoningBtn();
   }else if(typeof applyCapabilityGating==='function'){
     // Restore Think disabled-state based on current model capability.
     setTimeout(applyCapabilityGating,0);
@@ -3195,7 +3420,12 @@ function applyHumanizerLock(){
 function toggleMode(m){
   // Humanizer is exclusive: if it's on, every other mode + attach is locked.
   if(m!=='humanizer' && S.modes.has('humanizer'))return;
-  if(m==='think'){const md=MODELS[S.model]; if(md&&!md.hasThink){S.modes.delete('think');applyColors();return;}}
+  // Think guard: block if model doesn't support it (check both CAPS and MODELS)
+  if(m==='think'){
+    const caps=(typeof CAPS!=='undefined')?(CAPS[S.model]||CAPS['0']):null;
+    const ok=!!(caps&&caps.think)||(MODELS[S.model]&&MODELS[S.model].hasThink);
+    if(!ok){S.modes.delete('think');applyColors();return;}
+  }
   if(S.modes.has(m))S.modes.delete(m);else S.modes.add(m);
   if(m==='humanizer')applyHumanizerLock();
   const mDef=MODELS[S.model]||MODELS['0'];
@@ -3206,6 +3436,7 @@ function toggleMode(m){
   if(modeOn('image')){if(typeof updateImgLimitDisplay==='function')updateImgLimitDisplay();else{const _ild=document.getElementById('img-limit-display');if(_ild)_ild.textContent='1 image per message';}}
   const hzHint=document.getElementById('humanizer-hint');
   if(hzHint)hzHint.style.display=modeOn('humanizer')?'block':'none';
+  if(typeof updateReasoningBtn==='function')updateReasoningBtn();
   applyColors();updateModelDescs();applyCapabilityGating();
 }
 function modeOn(m){return S.modes.has(m);}
@@ -3578,7 +3809,8 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
     ? 'on'
     : (S.settings.webSearchAuto===false ? 'off' : 'auto');
   const requestThink = typeof modeOn==='function'&&modeOn('think');
-  try{res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs,context:extraCtx,temperature:S.settings.turboMode?0.1:mDef.temp,maxTokens:S.settings.longOutput?20000:(maxTok||8000),model:effectiveModel,contMode:!!contMode,useSearch:!!useSearch,webSearch:webSearchMode,think:requestThink}),signal:abortSignal});}
+  const reasoningEffort = (typeof getReasoningEffort==='function') ? getReasoningEffort() : 'medium';
+  try{res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs,context:extraCtx,temperature:S.settings.turboMode?0.1:mDef.temp,maxTokens:S.settings.longOutput?20000:(maxTok||8000),model:effectiveModel,contMode:!!contMode,useSearch:!!useSearch,webSearch:webSearchMode,think:requestThink,reasoningEffort}),signal:abortSignal});}
   catch(e){if(e.name!=='AbortError')throw e;return;}
   if(!res.ok)throw new Error('HTTP '+res.status);
   const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
@@ -4362,6 +4594,7 @@ function modelCaps(){return CAPS[S.model]||CAPS['0'];}
     }
     applyCapabilityGating();
     applyColors();
+    if(typeof updateReasoningBtn==='function')updateReasoningBtn();
   }catch(_){}
 })();
 function applyCapabilityGating(){
@@ -4377,6 +4610,7 @@ function applyCapabilityGating(){
     }
     const fileBtn=document.querySelector('[onclick*="file-input"]')||document.getElementById('file-btn');
     if(fileBtn){fileBtn.style.opacity=caps.files?'':'0.4';fileBtn.style.pointerEvents=caps.files?'':'none';}
+    if(typeof updateReasoningBtn==='function')updateReasoningBtn();
   }catch(_){}}
 const _origSelectModel=window.selectModel;
 window.selectModel=function(k){S.busy=false;setStopMode(false);_origSelectModel&&_origSelectModel(k);applyCapabilityGating();};
@@ -4622,8 +4856,8 @@ window.importChatsPrompt=function(){
 };
 
 /* ── Init hook ── */
-document.addEventListener('DOMContentLoaded',()=>{applyCapabilityGating();if(typeof applyHumanizerLock==='function')applyHumanizerLock();});
-setTimeout(()=>{applyCapabilityGating();if(typeof applyHumanizerLock==='function')applyHumanizerLock();},300);
+document.addEventListener('DOMContentLoaded',()=>{applyCapabilityGating();if(typeof applyHumanizerLock==='function')applyHumanizerLock();if(typeof updateReasoningBtn==='function')updateReasoningBtn();});
+setTimeout(()=>{applyCapabilityGating();if(typeof applyHumanizerLock==='function')applyHumanizerLock();if(typeof updateReasoningBtn==='function')updateReasoningBtn();},300);
 
 /* ── Owner Mode ── */
 const OWNER_PASSWORD = 'Void';
