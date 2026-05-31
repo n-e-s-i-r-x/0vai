@@ -3238,7 +3238,7 @@ function getReasoningEffort(){
   return REASONING_LEVELS[S.reasoningLevel]?.effort||'medium';
 }
 
-const LEAK_LINE_RE=[/^\s*\[[A-Z][^\]]{2,120}\]\s*$/,/---\s*WEB SEARCH RESULTS\s*---/i,/---\s*END SEARCH RESULTS\s*---/i,/\bDIRECT\s*ANSWER\s*:/i,/\[CODE MODE\b/i,/\[Current date and time\]/i,/\[Reasoning context above/i,/\[Continue from where/i,/\[Search complete/i,/<context>|<\/context>/i,/\bYou are (?:0|00|000|V|VV|VVV)\b/,/\bsystem prompt\b/i,/\b(?:my|the) (?:instructions?|rules|role|configuration|behavior list)\b/i];
+const LEAK_LINE_RE=[/^\s*\[[A-Z][^\]]{2,120}\]\s*$/,/---\s*WEB SEARCH RESULTS\s*---/i,/---\s*END SEARCH RESULTS\s*---/i,/\bDIRECT\s*ANSWER\s*:/i,/\[CODE MODE\b/i,/\[Current date and time\]/i,/\[Reasoning context above/i,/\[Continue from where/i,/\[Search complete/i,/<context>|<\/context>/i,/\bYou are (?:0|00|000|V|VV|VVV)\b/,/\bsystem prompt\b/i,/\b(?:my|the) (?:instructions?|rules|role|configuration|behavior list)\b/i,/\bweb_search\s+(?:query|tool|call)?[:\s]/i,/\btool_(?:use|call|invoke)\b/i,/^(?:Searching|I'll search|Let me search|I will search)\b/i];
 function sanitizeThinkText(t){if(!t)return t;return t.split('\n').map(l=>{for(const r of LEAK_LINE_RE)if(r.test(l))return'';return l;}).join('\n');}
 
 const UNCERTAINTY_HARD=[/\b(don'?t|do not|doesn'?t|does not)\s+have\s+(access|real.?time|live|current|up.?to.?date)\b/i,/\b(can'?t|cannot|could not|couldn'?t)\s+(access|find|retrieve|fetch|get|verify)\s+(real.?time|live|current|up.?to.?date|today'?s?|latest|that|this)\b/i,/\bmy\s+(knowledge|training|data)\s+(cut.?off|ends?|stops?|is\s+limited\s+to|is\s+from)\b/i,/\b(as\s+of\s+my\s+(last|knowledge)\s+update|my\s+knowledge\s+(only\s+goes?|extends?)\s+to)\b/i,/\b(this\s+(information\s+)?(may|might|could)\s+(be\s+)?(outdated|have\s+changed|no\s+longer\s+be\s+accurate))\b/i,/\b(i\s+(don'?t|do\s+not)\s+know\s+the\s+(current|latest|today'?s?|real.?time|live))\b/i,/\b(for\s+the\s+most\s+(up.?to.?date|current|accurate|recent)\s+(information|data|details),?\s+(please\s+)?(check|visit|refer|look))\b/i,/\b(i\s+(genuinely\s+)?(don'?t|do\s+not)\s+know|i\s+have\s+no\s+(idea|information|data)\s+(about|on|regarding))\b/i,/\b(unable\s+to\s+(provide|give|access)\s+(current|live|real.?time|today'?s?))\b/i,/\b(you'?d?\s+(need|should|would\s+need)\s+to\s+(check|verify|look\s+up)\s+(the\s+)?(current|latest|live|real.?time))\b/i,
@@ -3767,7 +3767,8 @@ function appendPending(id,isCodeMode){
   row.id=id;
   if(isCodeMode)row.dataset.codemode='true';
 
-  if(m.hasThink && modeOn('think')){
+  const modelSupportsThinkNow=(typeof CAPS!=='undefined'&&CAPS[S.model]&&CAPS[S.model].think)||m.hasThink;
+  if(modelSupportsThinkNow && modeOn('think')){
     row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
       <div class="ai-think streaming" id="${id}think" onclick="event.stopPropagation()"><div class="ai-think-hdr" onclick="event.stopPropagation();this.closest('.ai-think').classList.toggle('open')">
         <svg class="ai-think-chev" width="10" height="10" viewBox="0 0 5 5" fill="currentColor" shape-rendering="crispEdges"><rect x="1" y="1" width="1" height="3"/><rect x="2" y="0" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="3" y="1" width="1" height="3"/><rect x="4" y="2" width="1" height="1"/></svg>
@@ -3831,7 +3832,12 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
         if(d.meta){ yield {type:'meta', meta:d.meta}; continue; }
         const choice=d.choices?.[0];if(!choice)continue;
         if(choice.finish_reason)yield{type:'finish',reason:choice.finish_reason};
+        const reasoningDelta=choice.delta?.reasoning_content??choice.delta?.reasoning;
         const text=choice.delta?.content;
+        // Emit reasoning_content wrapped in <think> so streamParsed handles it
+        if(typeof reasoningDelta==='string'&&reasoningDelta.length){
+          yield '<think>'+reasoningDelta+'</think_partial>';
+        }
         if(typeof text==='string'&&text.length){
           if(pendingReplace){
             replaceBuf+=text;
@@ -3854,17 +3860,33 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
 }
 const OPEN_TAGS=['<think>','<thinking>','<|begin_of_thought|>'];
 const CLOSE_TAGS=['</think>','</thinking>','<|end_of_thought|>'];
+const PARTIAL_OPEN='<think>';
+const PARTIAL_CLOSE='</think_partial>';
 const MAX_TAG_LEN=22;
 function findFirst(buf,tags){let best=-1,bestTag=null;for(const t of tags){const i=buf.indexOf(t);if(i!==-1&&(best===-1||i<best)){best=i;bestTag=t;}}return{idx:best,tag:bestTag};}
 
 async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkModel,contMode,useSearch){
   if(isThinkModel===undefined)isThinkModel=true;
   let inThink=false,thinkSeen=false,buffer='';
+  let nativeReasoningOpen=false; // tracks if we're inside reasoning_content chunks
   for await(const delta of streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,useSearch)){
     if(delta&&typeof delta==='object'){yield delta;continue;}
     if(!isThinkModel){
-      if(delta.length)yield{type:'answer',text:delta};
+      // Even in non-think mode, strip any think_partial leakage
+      const cleaned=delta.replace(/<think>[\s\S]*?<\/think_partial>/g,'').replace(/<think>[\s\S]*?<\/think>/g,'');
+      if(cleaned.length)yield{type:'answer',text:cleaned};
       continue;
+    }
+    // Handle native reasoning_content chunks (wrapped as <think>...</think_partial>)
+    if(delta.startsWith(PARTIAL_OPEN)&&delta.endsWith(PARTIAL_CLOSE)){
+      const chunk=delta.slice(PARTIAL_OPEN.length,-PARTIAL_CLOSE.length);
+      if(!nativeReasoningOpen){nativeReasoningOpen=true;thinkSeen=true;inThink=true;}
+      if(chunk.length)yield{type:'think',text:chunk};
+      continue;
+    }
+    // If we were in native reasoning and now get content, close think
+    if(nativeReasoningOpen){
+      nativeReasoningOpen=false;inThink=false;
     }
     buffer+=delta;
     while(buffer.length>0){
@@ -3913,7 +3935,10 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
   const thCont=document.getElementById(aiId+'thcont');
   const thLbl=document.getElementById(aiId+'thlbl');
   const awEl=document.getElementById(aiId+'aw');
-  const mDef=MODELS[modelKey]||MODELS['0'];const useThink=mDef.hasThink && modeOn('think');
+  const mDef=MODELS[modelKey]||MODELS['0'];
+  const _capsModel=(typeof CAPS!=='undefined'&&CAPS[modelKey])||{};
+  const modelCanThink=!!(_capsModel.think||mDef.hasThink);
+  const useThink=modelCanThink && modeOn('think');
   const baseMsgs=convo.msgs.map((m,i)=>{
     if(m.role==='user'){
       if(m.visionPayload)return{role:'user',content:m.visionPayload};
