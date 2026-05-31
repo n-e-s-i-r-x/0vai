@@ -393,22 +393,15 @@ WHEN A TASK SEEMS UNDOABLE OR YOU LACK KNOWLEDGE:
    knows which tools the host actually runs and can route its own behavior. */
 const CAPABILITIES_BLOCK = `
 
-TOOLS AVAILABLE TO YOU
-- web_search: live web grounding via the host's own search backend
-  (/api/search.js). The host runs it AUTOMATICALLY when a question needs
-  fresh facts (current events, dates, prices, versions, names, anything past
-  your training cutoff). You do not request it; trust that when search
-  results appear in your system context, they were just retrieved by the host.
-- vision: image inputs are auto-routed to a vision model when the user attaches
-  an image. You will see image_url parts in the message content array.
+TOOLS — CRITICAL RULES
+The host automatically runs web search before your turn when fresh data is needed. Search results appear in your context when retrieved.
 
-RULES FOR USING TOOLS
-- Never claim to have used a tool you did not actually use.
-- Do NOT add inline source markers like "[source]", "[1]", or "(source: …)"
-  to your answer. The UI renders sources in a dropdown beneath your reply.
-  Just write the answer as continuous prose.
-- If the user's question genuinely needs fresh data and no search context was
-  provided, say so once and answer with what you know.
+NEVER do any of the following in your response:
+- Write "web_search", "tool_use", "tool_call", or any tool invocation syntax
+- Write "I'll search for...", "Let me look that up...", "Searching for...", "web_search query:"
+- Add inline source markers like "[source]", "[1]", or "(source: …)"
+
+Just answer directly. If search results are in your context, use them. If you need data not provided, say so once and answer from knowledge.
 `;
 
 function composePersona(modelKey) {
@@ -808,6 +801,9 @@ const LEAK_LINE_PATTERNS = [
   /\bYou are (?:0|00|000|V|VV|VVV)\b/,
   /\bsystem prompt\b/i,
   /\b(?:my|the) (?:instructions?|rules|role|configuration|behavior list)\b/i,
+  /\bweb_search\s+(?:query|tool|call)?[:\s]/i,
+  /\btool_(?:use|call|invoke)\b/i,
+  /^(?:Searching|I'll search|Let me search|I will search|Looking up)\b/i,
 ];
 const looksLikeLeak = (line) => !!line && LEAK_LINE_PATTERNS.some(re => re.test(line));
 
