@@ -872,7 +872,7 @@ function sseMeta(obj) {
 const BUILDER_FALLBACK = 'poolside/laguna-xs.2:free';
 
 /* Reads SSE stream from upstream, sends content chunks + agent meta events live. */
-async function streamModel(messages, send, signal, apiKey) {
+async function streamModel(messages, send, signal, apiKey, effort = 'low') {
   let lastError = '';
   for (const modelId of [BUILDER_MODEL, BUILDER_FALLBACK]) {
     const body = {
@@ -881,7 +881,7 @@ async function streamModel(messages, send, signal, apiKey) {
       temperature: 0.3,
       max_tokens: 32000,
       stream: true,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: effort },
     };
     send(sseMeta({ agent: { type:'log', level:'info', line:`Calling ${modelId}` } }));
     let res;
@@ -1022,7 +1022,7 @@ function extractFiles(text) {
   return { files };
 }
 
-async function buildProject({ persona, history, workspace, send, signal, apiKey }) {
+async function buildProject({ persona, history, workspace, send, signal, apiKey, effort = 'low' }) {
   const stepEmit = (id, status, title) => send(sseMeta({ agent: { type:'step_update', id, status, title } }));
   const logEmit = (level, line) => send(sseMeta({ agent: { type:'log', level, line } }));
 
@@ -1051,7 +1051,7 @@ async function buildProject({ persona, history, workspace, send, signal, apiKey 
   stepEmit('step_3', 'running', 'Thinking through implementation...');
 
   logEmit('info', 'Generating code...');
-  const result = await streamModel(messages, send, signal, apiKey);
+  const result = await streamModel(messages, send, signal, apiKey, effort);
 
   if (!result.ok) {
     stepEmit('step_3', 'error', result.error);
@@ -1133,12 +1133,17 @@ export default async function handler(req) {
     think: userWantsThink = false,
     useSearch = false,
     webSearch,                  // 'auto' | 'on' | 'off' (preferred)
+    reasoningEffort = 'medium', // 'low' | 'medium' | 'high' — from reasoning level picker
   } = body;
 
   // Backwards compat: legacy boolean useSearch maps to 'on' / 'auto'.
   const webSearchMode = (typeof webSearch === 'string')
     ? webSearch
     : (useSearch ? 'on' : 'auto');
+
+  // Resolve reasoning effort early (needed for both VV agent and standard chat)
+  const EFFORT_MAP_EARLY = { default:'medium', low:'low', medium:'medium', high:'high', rapid:'low', max:'high' };
+  const resolvedEffortEarly = EFFORT_MAP_EARLY[reasoningEffort] || 'medium';
 
   const apiKey = (typeof process !== 'undefined' ? process.env?.OPENROUTER_API_KEY : undefined)
               ?? (typeof globalThis !== 'undefined' ? globalThis.OPENROUTER_API_KEY : undefined);
@@ -1194,7 +1199,7 @@ export default async function handler(req) {
             send(sseMeta({ agent: { type:'log', level:'info', line:'Starting agent session...' } }));
             send(sseMeta({ agent: { type:'plan', steps:['Initializing task','Analyzing request','Planning architecture','Thinking through implementation','Extracting files','Creating files','Validating output','Finalizing build'], ids:['step_0','step_1','step_2','step_3','step_4','step_5','step_6','step_7'] } }));
             send(sseMeta({ agent: { type:'step_update', id:'step_0', status:'running', title:'Initializing task...' } }));
-            const result = await buildProject({ persona: PERSONA_CORE['VV'] + CAPABILITIES_BLOCK, history: trimmedHist, workspace: ws, send, signal: req.signal, apiKey });
+            const result = await buildProject({ persona: PERSONA_CORE['VV'] + CAPABILITIES_BLOCK, history: trimmedHist, workspace: ws, send, signal: req.signal, apiKey, effort: resolvedEffortEarly });
             send(sseMeta({ agent: { type:'log', level:'info', line:`Output: ${(result.text||'').length} chars, ${Object.keys(result.files||{}).length} files` } }));
             send(sseMeta({ agent: { type:'done', summary: result.text ? result.text.slice(0,200) : '', files: result.files, entry: '' } }));
             if (result.text) send(sseContent(result.text));
@@ -1230,9 +1235,17 @@ export default async function handler(req) {
     Array.isArray(m.content) && m.content.some(p => p.type === 'image_url')
   );
   const baseModelId      = hasImages ? VISION_MODEL_ID : effectiveEntry.id;
-  const hasReasoning     = hasImages ? false : (!!effectiveEntry.hasReasoning && !!userWantsThink);
-  const hasPromptedThink = hasImages ? false : (!!effectiveEntry.hasPromptedThink && !!userWantsThink);
+  // Vision models: keep reasoning if model supports it (use text-capable version when reasoning)
+  const supportsReasoning = !!effectiveEntry.hasReasoning;
+  const supportsPromptedThink = !!effectiveEntry.hasPromptedThink;
+  // When images are present, reasoning via reasoning_content field is still attempted if supported,
+  // but prompted think (<think> tags) is disabled since vision models don't support it.
+  const hasReasoning     = supportsReasoning && !!userWantsThink;
+  const hasPromptedThink = !hasImages && supportsPromptedThink && !!userWantsThink;
   const isThinkModel     = hasReasoning || hasPromptedThink;
+
+  // Resolve the actual effort to send — map 'rapid' and 'max' to backend values
+  const resolvedEffort = resolvedEffortEarly;
 
   /* Trim, dedupe, drop stale leaked-system assistant turns. */
   const LEAK_PATTERNS_MSG = [
@@ -1328,8 +1341,7 @@ export default async function handler(req) {
       if (hasReasoning && !hasImages) {
         // OpenRouter: `reasoning` accepts EITHER `effort` OR `max_tokens` —
         // sending both causes a 400 on several providers. Use effort only.
-        // Always 'low' — think blocks should be brief, not verbose.
-        reqBody.reasoning = { effort: 'low' };
+        reqBody.reasoning = { effort: resolvedEffort };
       }
       // (web search backend is /api/search.js, pre-injected — no upstream plugin)
 
