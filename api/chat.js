@@ -62,7 +62,9 @@ RESPONSE LAYOUT — USE JUDGMENT
 - Bold only the single key term of a definition — not every keyword.
 - Never pad with restatements, recap sentences, or "let me know if..." closers.
 - Never use decorative emoji. Never use em dashes (—).
-- Match response length to the question: short question = short answer, complex request = thorough answer.`;
+- Match response length to the question: short question = short answer, complex request = thorough answer.
+- CRITICAL: Never output literal \\n \\r \\t escape sequences. Use actual newlines. Never echo raw file content verbatim unless asked — summarize or extract what's relevant.
+- CRITICAL: Never output garbled characters, raw bytes, or encoding artifacts. If a file appears binary or unreadable, say so briefly.`;
 
 /* Visible thinking trace addendum — appended only when the model emits
    <think> reasoning so the trace is also readable. */
