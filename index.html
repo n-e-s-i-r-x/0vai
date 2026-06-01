@@ -3747,7 +3747,7 @@ function buildMsg(msg,idx){
     sourcesHtml=`<div class="sources-wrap"><button class="sources-toggle" onclick="event.stopPropagation();toggleSources(this)"><svg class="sources-chev" width="8" height="8" viewBox="0 0 4 4" fill="currentColor" shape-rendering="crispEdges"><rect x="0" y="1" width="1" height="2"/><rect x="1" y="0" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="2" y="1" width="1" height="2"/></svg>Sources (${uniqueSources.length})</button><div class="sources-list">${items}</div></div>`;
     }
   }
-  const html=(window.renderMd||renderMd)(msg.content||'');
+  const html=msg.imageUrl?'':(window.renderMd||renderMd)(msg.content||'');
   let imgHtml='';if(msg.imageUrl){const escapedUrl=esc(msg.imageUrl);imgHtml=`<div class="ai-image" onclick="event.stopPropagation();toggleImgSave(this,event)"><img src="${escapedUrl}" alt="Generated image" loading="lazy"/><button class="msg-img-save-btn" onclick="saveImg(this,event)">${PX_DOWN_SVG} Save</button></div>`;}
   let acts='';
   if(msg.truncated)acts=`<button class="ma-btn continue-btn" onclick="event.stopPropagation();continueMsg(${idx})">${PX_DOWN_SVG} Continue</button>`;
