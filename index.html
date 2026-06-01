@@ -3834,9 +3834,9 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
         if(choice.finish_reason)yield{type:'finish',reason:choice.finish_reason};
         const reasoningDelta=choice.delta?.reasoning_content??choice.delta?.reasoning;
         const text=choice.delta?.content;
-        // Emit reasoning_content wrapped in <think> so streamParsed handles it
+        // Emit reasoning_content as a proper typed object — no string wrapping
         if(typeof reasoningDelta==='string'&&reasoningDelta.length){
-          yield '<think>'+reasoningDelta+'</think_partial>';
+          yield{type:'_reasoning',text:reasoningDelta};
         }
         if(typeof text==='string'&&text.length){
           if(pendingReplace){
@@ -3860,34 +3860,39 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
 }
 const OPEN_TAGS=['<think>','<thinking>','<|begin_of_thought|>'];
 const CLOSE_TAGS=['</think>','</thinking>','<|end_of_thought|>'];
-const PARTIAL_OPEN='<think>';
-const PARTIAL_CLOSE='</think_partial>';
 const MAX_TAG_LEN=22;
 function findFirst(buf,tags){let best=-1,bestTag=null;for(const t of tags){const i=buf.indexOf(t);if(i!==-1&&(best===-1||i<best)){best=i;bestTag=t;}}return{idx:best,tag:bestTag};}
 
 async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkModel,contMode,useSearch){
   if(isThinkModel===undefined)isThinkModel=true;
   let inThink=false,thinkSeen=false,buffer='';
-  let nativeReasoningOpen=false; // tracks if we're inside reasoning_content chunks
+  let hasNativeReasoning=false;
   for await(const delta of streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,useSearch)){
-    if(delta&&typeof delta==='object'){yield delta;continue;}
+    // Pass through meta/finish/verify_replace objects unchanged
+    if(delta&&typeof delta==='object'){
+      // Native reasoning_content chunk — route directly as think
+      if(delta.type==='_reasoning'){
+        if(isThinkModel){
+          hasNativeReasoning=true;
+          thinkSeen=true;
+          yield{type:'think',text:delta.text};
+        }
+        continue;
+      }
+      yield delta;
+      continue;
+    }
+    // Plain string = content delta
     if(!isThinkModel){
-      // Even in non-think mode, strip any think_partial leakage
-      const cleaned=delta.replace(/<think>[\s\S]*?<\/think_partial>/g,'').replace(/<think>[\s\S]*?<\/think>/g,'');
-      if(cleaned.length)yield{type:'answer',text:cleaned};
+      if(delta.length)yield{type:'answer',text:delta};
       continue;
     }
-    // Handle native reasoning_content chunks (wrapped as <think>...</think_partial>)
-    if(delta.startsWith(PARTIAL_OPEN)&&delta.endsWith(PARTIAL_CLOSE)){
-      const chunk=delta.slice(PARTIAL_OPEN.length,-PARTIAL_CLOSE.length);
-      if(!nativeReasoningOpen){nativeReasoningOpen=true;thinkSeen=true;inThink=true;}
-      if(chunk.length)yield{type:'think',text:chunk};
+    // If we got native reasoning, content deltas are always answer
+    if(hasNativeReasoning){
+      if(delta.length)yield{type:'answer',text:delta};
       continue;
     }
-    // If we were in native reasoning and now get content, close think
-    if(nativeReasoningOpen){
-      nativeReasoningOpen=false;inThink=false;
-    }
+    // Prompted-think path: parse <think>...</think> tags from content stream
     buffer+=delta;
     while(buffer.length>0){
       if(inThink){
@@ -3907,6 +3912,7 @@ async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkMo
           if(!thinkSeen){
             inThink=true;thinkSeen=true;buffer=buffer.substring(idx+tag.length);
           }else{
+            // Second <think> tag — skip through to closing tag
             const rest=buffer.substring(idx+tag.length);
             const{idx:ci,tag:ct}=findFirst(rest,CLOSE_TAGS);
             buffer=ci!==-1?rest.substring(ci+ct.length):'';
@@ -3965,8 +3971,30 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
   const allowSmartSearch=!contMode;
   S.abort=new AbortController();
 
+  // Append-only think renderer — zero flicker during streaming
+  const renderThink=(text)=>{
+    thinkText+=text;
+    if(!thCont)return;
+    if(thCont._streamNode){
+      thCont._streamNode.nodeValue+=text;
+    }else{
+      thCont.style.whiteSpace='pre-wrap';
+      thCont._streamNode=document.createTextNode(text);
+      thCont.appendChild(thCont._streamNode);
+    }
+    if(S.settings.autoscroll)scrollBot();
+  };
+  // One final markdown render after think stream ends
+  const finalRenderThink=()=>{
+    if(!thCont||!thinkText)return;
+    thCont._streamNode=null;
+    thCont.style.whiteSpace='normal';
+    thCont.innerHTML=(window.renderMd||renderMd)(sanitizeThinkText(thinkText)||'');
+  };
+
   const enterAnswerPhase=()=>{
     if(answerPhase)return;answerPhase=true;
+    finalRenderThink();
     thinkDurStr=((Date.now()-tStart)/1000).toFixed(1);
     if(thinkEl){thinkEl.classList.remove('streaming');}
     if(thLbl)thLbl.textContent='Thought for '+thinkDurStr+'s';
@@ -3988,19 +4016,6 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
     if(S.settings.autoscroll)scrollBot();
   };
   const renderAnswer=throttle(_renderAnswerNow,150);
-
-  const _renderThinkNow=()=>{
-    if(!thCont)return;
-    if(thCont._tn){thCont.removeChild(thCont._tn);thCont._tn=null;}
-    thCont.style.whiteSpace='normal';
-    thCont.innerHTML=(window.renderMd||renderMd)(sanitizeThinkText(thinkText)||'');
-    if(S.settings.autoscroll)scrollBot();
-  };
-  const _renderThinkThrottled=throttle(_renderThinkNow,120);
-  const renderThink=(text)=>{
-    thinkText+=text;
-    _renderThinkThrottled();
-  };
 
   try{
     if(useThink){
@@ -4034,7 +4049,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
           if(pill&&thCont){const done=document.createElement('div');done.className='think-srch-done';done.textContent='Found info - continuing';pill.replaceWith(done);}
           extraCtx=extraCtx+(internalSearchData?buildSearchCtx(internalSearchData):'')+'\n\nUse the information above and reply with the final answer only.';
           S.abort=new AbortController();userSearchData=internalSearchData;if(internalSearchData)userWantsSearch=true;firstPass=false;
-          if(thCont){if(thCont._tn){thCont._tn=null;}thCont.innerHTML='';}thinkText='';
+          if(thCont){if(thCont._streamNode){thCont._streamNode=null;}thCont.innerHTML='';}thinkText='';
           continue;
         }else{break;}
       }
@@ -4044,6 +4059,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         if(promoted){
           answerText=promoted;enterAnswerPhase();
         }else{
+          finalRenderThink();
           thinkDurStr=((Date.now()-tStart)/1000).toFixed(1);
           if(thinkEl)thinkEl.classList.remove('streaming');
           if(thLbl)thLbl.textContent='Thought for '+thinkDurStr+'s';
