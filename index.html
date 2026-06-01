@@ -366,6 +366,12 @@ body.themed .attach-btn:active{opacity:1;background:var(--accent-subtle);}
 .attach-btn.has-file{color:#4a9eff;}
 body.themed .attach-btn.has-file{color:var(--accent);opacity:1;}
 
+/* ── LINK STYLES ── */
+.ai-txt a,.ai-think-content a{color:#4a9eff;text-decoration:none;border-bottom:1px solid rgba(74,158,255,0.3);transition:border-color .15s,color .15s;}
+.ai-txt a:hover,.ai-think-content a:hover{color:#7abfff;border-bottom-color:rgba(122,191,255,0.7);}
+body.themed .ai-txt a,body.themed .ai-think-content a{color:var(--accent);border-bottom-color:color-mix(in srgb,var(--accent) 30%,transparent);}
+body.themed .ai-txt a:hover,body.themed .ai-think-content a:hover{color:var(--accent);border-bottom-color:var(--accent);}
+
 /* ── THINK TOGGLE BUTTON ── */
 #think-toggle-btn{height:28px;padding:0 10px;border-radius:7px;background:#1a1a1a;border:none;outline:none;color:#666;font-size:11px;font-weight:700;letter-spacing:.4px;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,transform .1s;flex-shrink:0;}
 #think-toggle-btn:active{transform:scale(.93);}
@@ -2839,10 +2845,61 @@ if(typeof marked==="undefined")window.marked={parse:s=>String(s).replace(/&/g,"&
 function throttle(fn,ms){let t=0,pending=false;return function(...a){const now=Date.now();if(now-t>=ms){t=now;fn.apply(this,a);}else if(!pending){pending=true;setTimeout(()=>{pending=false;t=Date.now();fn.apply(this,a);},ms-(now-t));}};}
 if(typeof DOMPurify==="undefined")window.DOMPurify={sanitize:s=>s};
 
-/* Configure marked once: GFM tables/strikethrough + soft-break to <br>. */
-try{ if(window.marked && typeof marked.setOptions==='function'){
-  marked.setOptions({ breaks:false, gfm:true, headerIds:false, mangle:false });
-} }catch(_){}
+/* Configure marked once: GFM + auto-link bare URLs. */
+function _initMarked(){
+  try{ if(window.marked && typeof marked.setOptions==='function'){
+    marked.setOptions({ breaks:false, gfm:true, headerIds:false, mangle:false });
+    const renderer=new marked.Renderer();
+    const _linkOrig=renderer.link.bind(renderer);
+    renderer.link=function(href,title,text){
+      const base=_linkOrig(href,title,text);
+      return base.replace(/^<a /,'<a target="_blank" rel="noopener noreferrer" ');
+    };
+    marked.setOptions({renderer});
+    return true;
+  }}catch(_){}
+  return false;
+}
+if(!_initMarked()) setTimeout(_initMarked, 800);
+
+/* DOMPurify: allow href/target/rel on anchors but block dangerous schemes. */
+function _initDOMPurify(){
+  try{ if(window.DOMPurify && typeof DOMPurify.addHook==='function'){
+    DOMPurify.setConfig({ADD_ATTR:['target','rel'],FORBID_TAGS:['script','style','iframe','object','embed','form'],ALLOW_DATA_ATTR:false});
+    DOMPurify.addHook('afterSanitizeAttributes',function(node){
+      if(node.tagName==='A'){
+        const href=node.getAttribute('href')||'';
+        if(/^javascript:|^data:|^vbscript:/i.test(href)){node.removeAttribute('href');return;}
+        node.setAttribute('target','_blank');
+        node.setAttribute('rel','noopener noreferrer');
+      }
+    });
+    return true;
+  }}catch(_){}
+  return false;
+}
+if(!_initDOMPurify()) setTimeout(_initDOMPurify, 800);
+
+/* ── OUTPUT CLEANER ──────────────────────────────────────────────────
+   Strips artifacts that appear when models process file content:
+   literal \n \r \t escape sequences, stray null bytes, triple+ blank
+   lines, and leading/trailing whitespace blobs. Applied to all answer
+   text before rendering.                                              */
+function cleanModelOutput(text){
+  if(!text||typeof text!=='string')return text||'';
+  return text
+    // literal backslash-n/r/t sequences models sometimes emit verbatim
+    .replace(/\\n/g,'\n')
+    .replace(/\\r/g,'')
+    .replace(/\\t/g,'  ')
+    // null bytes and zero-width spaces
+    .replace(/\x00/g,'').replace(/\u200b/g,'')
+    // collapse 3+ consecutive blank lines to 2
+    .replace(/\n{3,}/g,'\n\n')
+    // strip trailing whitespace on each line
+    .replace(/[^\S\n]+$/gm,'')
+    .trim();
+}
 
 /* Auto-paragraph: if a model returns a wall-of-text (no blank lines, no
    markdown blocks) split it on sentence boundaries into ~2-sentence chunks
@@ -2868,7 +2925,8 @@ function autoParagraph(text){
 ══════════════════════════════════════ */
 function renderMd(text){
   if(!text)return'';
-  const prepped=autoParagraph(text);
+  const cleaned=cleanModelOutput(text);
+  const prepped=autoParagraph(cleaned);
   const raw=DOMPurify.sanitize(marked.parse(prepped));
   const tmp=document.createElement('div');
   tmp.innerHTML=raw;
@@ -2958,6 +3016,13 @@ function renderMd(text){
     }
     appendNode(node);i++;
   }
+  // Ensure all links open safely in new tab
+  out.querySelectorAll('a[href]').forEach(a=>{
+    const href=a.getAttribute('href')||'';
+    if(/^javascript:|^data:|^vbscript:/i.test(href)){a.removeAttribute('href');return;}
+    a.setAttribute('target','_blank');
+    a.setAttribute('rel','noopener noreferrer');
+  });
   return out.innerHTML;
 }
 
@@ -3239,7 +3304,7 @@ function getReasoningEffort(){
 }
 
 const LEAK_LINE_RE=[/^\s*\[[A-Z][^\]]{2,120}\]\s*$/,/---\s*WEB SEARCH RESULTS\s*---/i,/---\s*END SEARCH RESULTS\s*---/i,/\bDIRECT\s*ANSWER\s*:/i,/\[CODE MODE\b/i,/\[Current date and time\]/i,/\[Reasoning context above/i,/\[Continue from where/i,/\[Search complete/i,/<context>|<\/context>/i,/\bYou are (?:0|00|000|V|VV|VVV)\b/,/\bsystem prompt\b/i,/\b(?:my|the) (?:instructions?|rules|role|configuration|behavior list)\b/i,/\bweb_search\s+(?:query|tool|call)?[:\s]/i,/\btool_(?:use|call|invoke)\b/i,/^(?:Searching|I'll search|Let me search|I will search)\b/i];
-function sanitizeThinkText(t){if(!t)return t;return t.split('\n').map(l=>{for(const r of LEAK_LINE_RE)if(r.test(l))return'';return l;}).join('\n');}
+function sanitizeThinkText(t){if(!t)return t;const c=cleanModelOutput(t);return c.split('\n').map(l=>{for(const r of LEAK_LINE_RE)if(r.test(l))return'';return l;}).join('\n');}
 
 const UNCERTAINTY_HARD=[/\b(don'?t|do not|doesn'?t|does not)\s+have\s+(access|real.?time|live|current|up.?to.?date)\b/i,/\b(can'?t|cannot|could not|couldn'?t)\s+(access|find|retrieve|fetch|get|verify)\s+(real.?time|live|current|up.?to.?date|today'?s?|latest|that|this)\b/i,/\bmy\s+(knowledge|training|data)\s+(cut.?off|ends?|stops?|is\s+limited\s+to|is\s+from)\b/i,/\b(as\s+of\s+my\s+(last|knowledge)\s+update|my\s+knowledge\s+(only\s+goes?|extends?)\s+to)\b/i,/\b(this\s+(information\s+)?(may|might|could)\s+(be\s+)?(outdated|have\s+changed|no\s+longer\s+be\s+accurate))\b/i,/\b(i\s+(don'?t|do\s+not)\s+know\s+the\s+(current|latest|today'?s?|real.?time|live))\b/i,/\b(for\s+the\s+most\s+(up.?to.?date|current|accurate|recent)\s+(information|data|details),?\s+(please\s+)?(check|visit|refer|look))\b/i,/\b(i\s+(genuinely\s+)?(don'?t|do\s+not)\s+know|i\s+have\s+no\s+(idea|information|data)\s+(about|on|regarding))\b/i,/\b(unable\s+to\s+(provide|give|access)\s+(current|live|real.?time|today'?s?))\b/i,/\b(you'?d?\s+(need|should|would\s+need)\s+to\s+(check|verify|look\s+up)\s+(the\s+)?(current|latest|live|real.?time))\b/i,
 /\b(not\s+sure\s+(if|whether|about)\s+(this\s+)?(syntax|api|method|function|library|package|version))\b/i,/\b(you\s+(may|might|should)\s+(want\s+to\s+)?(check|verify|confirm)\s+(the\s+)?(docs?|documentation|api|syntax))\b/i,/\b(this\s+(may|might)\s+(have\s+changed|be\s+different|vary)\s+(in|across|between|with)\s+(newer|older|different|recent)\s+versions?)\b/i,/\b(i'?m\s+not\s+(100%\s+)?(certain|sure|confident)\s+(about\s+(the\s+)?)?(exact|precise|correct)\s+(syntax|api|usage|name))\b/i,
@@ -3453,14 +3518,20 @@ function isLengthFinish(fr){
   const s=String(fr).toLowerCase();
   return s==='length'||s==='max_tokens'||s==='max_output_tokens'||s==='model_length'||s.indexOf('length')!==-1||s.indexOf('max_token')!==-1;
 }
-// Heuristic: looks cut off mid-thought (no terminal punctuation / closing fence)
+// Heuristic: only flag truncation when genuinely cut off mid-word/sentence.
+// Do NOT fire on responses ending with code blocks, colons, headers, or common
+// non-punctuated completions like lists. Require text to be substantial.
 function looksMidSentence(t){
-  if(!t)return false;
-  const tail=t.replace(/\s+$/,'').slice(-3);
-  if(!tail)return false;
-  if(/[.!?\)\]\"\u201D\u2019]/.test(tail.slice(-1)))return false;
-  if(/```\s*$/.test(t))return false;
-  return t.length>400;
+  if(!t||t.length<500)return false;
+  const trimmed=t.replace(/\s+$/,'');
+  const tail=trimmed.slice(-1);
+  // Clearly ended properly
+  if(/[.!?)\]"'\u201D\u2019`]/.test(tail))return false;
+  if(/```\s*$/.test(trimmed))return false;
+  if(/^#+\s/m.test(trimmed.slice(-80)))return false; // ends with heading
+  if(/[-*]\s\S/.test(trimmed.slice(-40)))return false; // ends mid-list-item completion
+  // Only flag if genuinely cut off mid-lowercase-word (not end of a number or symbol)
+  return /[a-z]$/.test(tail)&&t.length>800;
 }
 
 async function runHumanizer(userText,aiId){
@@ -3759,7 +3830,7 @@ function viewCode(btn){
 }
 </script>
 <script>
-function appendPending(id,isCodeMode){
+function appendPending(id,isCodeMode,isImageMode){
   const ca=document.getElementById('chat-area');if(!ca)return;
   const m=MODELS[S.model]||MODELS['0'];
   const row=document.createElement('div');
@@ -3767,22 +3838,28 @@ function appendPending(id,isCodeMode){
   row.id=id;
   if(isCodeMode)row.dataset.codemode='true';
 
-  const modelSupportsThinkNow=(typeof CAPS!=='undefined'&&CAPS[S.model]&&CAPS[S.model].think)||m.hasThink;
-  if(modelSupportsThinkNow && modeOn('think')){
+  if(isImageMode){
     row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
-      <div class="ai-think streaming" id="${id}think" onclick="event.stopPropagation()"><div class="ai-think-hdr" onclick="event.stopPropagation();this.closest('.ai-think').classList.toggle('open')">
-        <svg class="ai-think-chev" width="10" height="10" viewBox="0 0 5 5" fill="currentColor" shape-rendering="crispEdges"><rect x="1" y="1" width="1" height="3"/><rect x="2" y="0" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="3" y="1" width="1" height="3"/><rect x="4" y="2" width="1" height="1"/></svg>
-        <span class="ai-think-lbl" id="${id}thlbl">Thinking</span></div>
-        <div class="ai-think-body"><div class="ai-think-content" id="${id}thcont"></div></div></div>
-      <div class="answer-waiting" id="${id}aw"><div class="answer-waiting-dots"><span></span><span></span><span></span></div><span class="answer-waiting-lbl">Answer on the way…</span></div>
-      <div class="ai-txt" id="${id}txt" style="display:none"></div>
+      <div class="ai-txt" id="${id}txt"><div class="activity-wrap" data-state="image"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">Generating image</div><div class="activity-sub" id="${id}sub">Creating your image…</div></div></div></div>
     </div></div></div></div>`;
   } else {
-    const aState=isCodeMode?'coding':'writing';
-    const aLabel=isCodeMode?'Writing Code':'Typing';
-    row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
-      <div class="ai-txt" id="${id}txt"><div class="activity-wrap" data-state="${aState}"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">${aLabel}</div><div class="activity-sub" id="${id}sub">Composing a response</div></div></div></div>
-    </div></div></div></div>`;
+    const modelSupportsThinkNow=(typeof CAPS!=='undefined'&&CAPS[S.model]&&CAPS[S.model].think)||m.hasThink;
+    if(modelSupportsThinkNow && modeOn('think')){
+      row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
+        <div class="ai-think streaming" id="${id}think" onclick="event.stopPropagation()"><div class="ai-think-hdr" onclick="event.stopPropagation();this.closest('.ai-think').classList.toggle('open')">
+          <svg class="ai-think-chev" width="10" height="10" viewBox="0 0 5 5" fill="currentColor" shape-rendering="crispEdges"><rect x="1" y="1" width="1" height="3"/><rect x="2" y="0" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="3" y="1" width="1" height="3"/><rect x="4" y="2" width="1" height="1"/></svg>
+          <span class="ai-think-lbl" id="${id}thlbl">Thinking</span></div>
+          <div class="ai-think-body"><div class="ai-think-content" id="${id}thcont"></div></div></div>
+        <div class="answer-waiting" id="${id}aw"><div class="answer-waiting-dots"><span></span><span></span><span></span></div><span class="answer-waiting-lbl">Answer on the way…</span></div>
+        <div class="ai-txt" id="${id}txt" style="display:none"></div>
+      </div></div></div></div>`;
+    } else {
+      const aState=isCodeMode?'coding':'writing';
+      const aLabel=isCodeMode?'Writing Code':'Typing';
+      row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
+        <div class="ai-txt" id="${id}txt"><div class="activity-wrap" data-state="${aState}"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">${aLabel}</div><div class="activity-sub" id="${id}sub">Composing a response</div></div></div></div>
+      </div></div></div></div>`;
+    }
   }
   ca.appendChild(row);
   setStopMode(true);if(S.settings.autoscroll)scrollBot();
@@ -4028,14 +4105,13 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
           if(chunk&&typeof chunk==='object'&&chunk.type==='finish'){if(isLengthFinish(chunk.reason))wasTruncated=true;continue;}
           if(chunk&&chunk.type==='meta'){ingestMeta(chunk.meta);continue;}
           if(chunk.type==='think'){
-            if(answerPhase){
-              answerText+=chunk.text;renderAnswer();
-            }else{
+            if(!answerPhase){
               renderThink(chunk.text);
               if(firstPass&&!internalSearchFired&&allowSmartSearch&&!userSearchData&&thinkText.length>80&&detectUncertainty(thinkText)){
                 internalSearchFired=true;runWithSmartSearch=true;if(S.abort)S.abort.abort();break;
               }
             }
+            // Once answerPhase started, silently drop think chunks — never bleed into answer
           }else if(chunk.type==='answer'){
             enterAnswerPhase();
             answerText+=chunk.text;renderAnswer();
@@ -4054,24 +4130,34 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         }else{break;}
       }
 
+      // If model only produced reasoning and no answer, extract last paragraph of think
+      // as a fallback answer but strip reasoning markers — keep think block intact
       if(!answerPhase){
-        const promoted=promoteThinkTail(thinkText);
-        if(promoted){
-          answerText=promoted;enterAnswerPhase();
+        finalRenderThink();
+        thinkDurStr=((Date.now()-tStart)/1000).toFixed(1);
+        if(thinkEl)thinkEl.classList.remove('streaming');
+        if(thLbl)thLbl.textContent='Thought for '+thinkDurStr+'s';
+        if(awEl)awEl.remove();
+        // Try to extract a usable answer from the tail of think text
+        const thinkLines=thinkText.trim().split('\n').filter(l=>l.trim());
+        const lastPara=thinkLines.slice(-4).join('\n').trim();
+        if(lastPara&&lastPara.length>20&&!/<\/?think/i.test(lastPara)){
+          answerText=lastPara;
+          if(txtEl){txtEl.style.display='';txtEl.innerHTML=(window.renderMd||renderMd)(answerText);}
         }else{
-          finalRenderThink();
-          thinkDurStr=((Date.now()-tStart)/1000).toFixed(1);
-          if(thinkEl)thinkEl.classList.remove('streaming');
-          if(thLbl)thLbl.textContent='Thought for '+thinkDurStr+'s';
-          if(awEl)awEl.remove();
           if(txtEl){txtEl.style.display='';txtEl.innerHTML='';}
         }
+        enterAnswerPhase();
       }
 
+      // Final render of answer into response area (always runs after think path)
       if(txtEl){
         const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();
         txtEl.style.display='';
-        txtEl.innerHTML=answerText?(window.renderMd||renderMd)(answerText):(window.renderMd||renderMd)('_(No answer generated - try again)_');
+        if(answerText.trim()){
+          txtEl.innerHTML=(window.renderMd||renderMd)(answerText);
+          attachCodeBtns();
+        }
       }
 
     }else{
@@ -4082,9 +4168,10 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         attachCodeBtns();
         if(S.settings.autoscroll)scrollBot();
       },150);
+      let gotFinishReason=false;
       for await(const chunk of streamParsed(baseMsgs,extraCtx,modelKey,S.settings.longOutput?20000:8000,S.abort.signal,false,false,userWantsSearch)){
         if(S.abort?.signal?.aborted)break;
-        if(chunk&&chunk.type==='finish'){if(isLengthFinish(chunk.reason))wasTruncated=true;continue;}
+        if(chunk&&chunk.type==='finish'){if(isLengthFinish(chunk.reason))wasTruncated=true;gotFinishReason=true;continue;}
         if(chunk&&chunk.type==='meta'){ingestMeta(chunk.meta);continue;}
         if(chunk&&chunk.type==='verify_replace'){
           let vText=chunk.text;
@@ -4106,7 +4193,8 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         answerText+=txt;
         if(txtEl){const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();_renderNonThink();}
       }
-      if(!wasTruncated&&looksMidSentence(answerText))wasTruncated=true;
+      // Only use heuristic truncation when no finish_reason arrived at all
+      if(!wasTruncated&&!gotFinishReason&&looksMidSentence(answerText))wasTruncated=true;
       if(!wasTruncated&&answerText&&!userSearchData&&allowSmartSearch&&!modeOn('image')&&detectUncertainty(answerText)){
         showUserSearchInd();
         const q=userQuery||baseMsgs.filter(m=>m.role==='user').slice(-1)[0]?.content||'';
@@ -4274,13 +4362,34 @@ async function sendMsg(){
           });
           visionParts.push({type:'image_url', image_url:{url:b64}});
         }else{
-          const t = await new Promise((resolve) => {
-            const fr = new FileReader();
-            fr.onload = () => resolve(fr.result);
-            fr.onerror = () => resolve('');
-            fr.readAsText(f);
-          });
-          if(t) fileTexts.push('=== '+f.name+' ===\n'+t);
+          const isZip=/\.(zip)$/i.test(f.name);
+          if(isZip && typeof JSZip!=='undefined'){
+            try{
+              const ab=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=()=>rej();fr.readAsArrayBuffer(f);});
+              const zip=await JSZip.loadAsync(ab);
+              const entries=[];
+              const fileNames2=Object.keys(zip.files).filter(n=>!zip.files[n].dir).slice(0,30);
+              for(const name of fileNames2){
+                try{
+                  const txt=await zip.files[name].async('string');
+                  const preview=txt.slice(0,3000)+(txt.length>3000?'\n...[truncated]':'');
+                  entries.push('--- '+name+' ---\n'+preview);
+                }catch(_){entries.push('--- '+name+' --- [binary, skipped]');}
+              }
+              if(entries.length)fileTexts.push('=== '+f.name+' (ZIP contents) ===\n'+entries.join('\n\n'));
+            }catch(zipErr){
+              // Fallback: treat as binary
+              fileTexts.push('=== '+f.name+' === [ZIP could not be read]');
+            }
+          }else{
+            const t = await new Promise((resolve) => {
+              const fr = new FileReader();
+              fr.onload = () => resolve(fr.result);
+              fr.onerror = () => resolve('');
+              fr.readAsText(f);
+            });
+            if(t) fileTexts.push('=== '+f.name+' ===\n'+t);
+          }
         }
       }
 
@@ -4309,8 +4418,8 @@ async function sendMsg(){
         if(userRow) ca.appendChild(userRow);
       }
       if(S.settings.speedTimer) startSpeedTimer();
-      if(modeOn('image')){ appendPending(aiId,icm); generateImage(aiId,text||fileNames.join(', '),c); return; }
-      appendPending(aiId,icm); generate(c,aiId,null,text||fullContent,modeOn('web'),false,icm);
+      if(modeOn('image')){ appendPending(aiId,icm,true); generateImage(aiId,text||fileNames.join(', '),c); return; }
+      appendPending(aiId,icm,false); generate(c,aiId,null,text||fullContent,modeOn('web'),false,icm);
       return;
     }
 
@@ -4327,8 +4436,8 @@ async function sendMsg(){
       if(userRow) ca.appendChild(userRow);
     }
     if(S.settings.speedTimer) startSpeedTimer();
-    if(modeOn('image')){ appendPending(aiId,icm); generateImage(aiId,text,c); return; }
-    appendPending(aiId,icm); generate(c,aiId,null,text,modeOn('web'),false,icm);
+    if(modeOn('image')){ appendPending(aiId,icm,true); generateImage(aiId,text,c); return; }
+    appendPending(aiId,icm,false); generate(c,aiId,null,text,modeOn('web'),false,icm);
   }catch(e){console.error('sendMsg error:',e);showErr(e.message||'sendMsg failed');}
 }
 async function generateImage(aiId,prompt,convo){
