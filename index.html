@@ -4447,8 +4447,12 @@ async function generateImage(aiId,prompt,convo){
     const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     if(txtEl){const aw=txtEl.querySelector('.activity-wrap,.vv-reply-loading,.answer-waiting,.loading');if(aw)aw.remove();}
     let content='_(Image generation failed)_';
-    if(r.ok){const d=await r.json();if(d.url)content='![Generated Image]('+d.url+')';}
-    convo.msgs.push({role:'assistant',content,ts:Date.now(),imageUrl:d?.url||null,modelKey:S.model,codeMode:false,truncated:false});
+    let imageUrl=null;
+    if(r.ok){
+      const d=await r.json();
+      if(d&&d.url){imageUrl=d.url;content='![Generated Image]('+d.url+')';}
+    }
+    convo.msgs.push({role:'assistant',content,ts:Date.now(),imageUrl,modelKey:S.model,codeMode:false,truncated:false});
     const mi=convo.msgs.length-1;const fh=buildMsg(convo.msgs[mi],mi);
     const tmp=document.createElement('div');tmp.innerHTML=fh;
     const nr=tmp.firstElementChild;const pr=document.getElementById(aiId);
