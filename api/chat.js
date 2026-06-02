@@ -1326,9 +1326,19 @@ export default async function handler(req) {
     if (preSearchData) preSearchContext = buildSearchContext(preSearchData);
   }
 
+  // Detect long-form request
+  const lastUserContent = typeof lastUserMsg?.content === 'string'
+    ? lastUserMsg.content
+    : (lastUserMsg?.content?.[0]?.text || '');
+  const isLongFormReq = /\b(\d{2,})\s*(paragraph|page|chapter|section|word|line|item|step|point)/i.test(lastUserContent)
+    || /\b(full|complete|entire|whole|detailed|comprehensive|exhaustive|long|extended|thorough)\b.*\b(document|report|story|essay|code|implementation|file|article|guide|tutorial|script|program)/i.test(lastUserContent)
+    || /write.*complete|complete.*implementation|full.*codebase|entire.*file/i.test(lastUserContent)
+    || contMode;
+
   const persona = composePersona(effectiveModelKey)
-                + (context ? '\n\n' + context : '')
-                + (preSearchContext || '');
+    + (context ? '\n\n' + context : '')
+    + (preSearchContext || '')
+    + (isLongFormReq ? '\n\nLONG OUTPUT MODE: The user has requested extensive content. Generate as much as possible before stopping. Never use placeholders like "// existing code", "rest of implementation", or "continue similarly". Never summarize or compress unless explicitly asked.' : '');
 
   let finalMsgs = trimmed;
   if (!contMode) {
