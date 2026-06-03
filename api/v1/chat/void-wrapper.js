@@ -251,10 +251,9 @@ const IDENTITY_REPLACEMENTS = [
 export function wrapContent(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Only desquish if this chunk looks squished (long runs with no spaces).
-  // Normal streaming chunks are fine — desquishing them would corrupt valid text.
-  const looksSquished = /[a-zA-Z]{20,}/.test(text.replace(/\s/g, ''));
-  let result = looksSquished ? desquish(text) : text;
+  // Do NOT desquish content — desquish is only safe for reasoning/thinking text.
+  // Running it on normal content corrupts legitimate camelCase, code, and prose.
+  let result = text;
 
   // Apply all identity replacements
   for (const [pattern, replacement] of IDENTITY_REPLACEMENTS) {
@@ -315,8 +314,9 @@ export function wrapContent(text) {
   result = result.replace(/-R1-Distill(?:-[A-Za-z0-9]+)*/gi, '');
   result = result.replace(/R1-Distill(?:-[A-Za-z0-9]+)*/gi, '');
 
-  // Clean up double spaces left by removals
-  result = result.replace(/ {2,}/g, ' ').trim();
+  // Clean up double spaces left by removals (no .trim() — would strip leading
+  // spaces from streaming chunks, causing words to merge without spaces)
+  result = result.replace(/ {2,}/g, ' ');
 
   return result;
 }
