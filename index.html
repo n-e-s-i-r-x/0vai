@@ -2892,6 +2892,8 @@ function cleanModelOutput(text){
     .replace(/\\n/g,'\n')
     .replace(/\\r/g,'')
     .replace(/\\t/g,'  ')
+    // em dashes — replace with a simple hyphen for a more natural tone
+    .replace(/\u2014/g,' - ')
     // null bytes and zero-width spaces
     .replace(/\x00/g,'').replace(/\u200b/g,'')
     // collapse 3+ consecutive blank lines to 2
@@ -3652,7 +3654,7 @@ function applySpeedSetting(){
   }
 }
 
-function setupScroll(){const ca=document.getElementById('chat-area');if(!ca)return;ca.addEventListener('scroll',()=>{const far=ca.scrollHeight-ca.scrollTop-ca.clientHeight>120;document.getElementById('scroll-btn')?.classList.toggle('show',far);});}
+function setupScroll(){const ca=document.getElementById('chat-area');if(!ca)return;function checkScroll(){const far=ca.scrollHeight-ca.scrollTop-ca.clientHeight>160;document.getElementById('scroll-btn')?.classList.toggle('show',far);}ca.addEventListener('scroll',checkScroll);const mo=new MutationObserver(()=>{if(S.settings.autoscroll)document.getElementById('scroll-btn')?.classList.remove('show');else checkScroll();});mo.observe(ca,{childList:true,subtree:true});}
 function setupInput(){
   const inp=document.getElementById('user-input');
   if(inp){inp.addEventListener('input',()=>{if(inp){autoGrow(inp);}});}
@@ -3972,9 +3974,27 @@ async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkMo
       yield delta;
       continue;
     }
+
     // Plain string = content delta
     if(!isThinkModel){
-      if(delta.length)yield{type:'answer',text:delta};
+      if(delta.length){
+        // Strip any <think>…</think> bleed-through — reasoning must never show without the think toggle
+        // Use the shared buffer/tag-parser below when isThinkModel is false too
+        buffer+=delta;
+        let out='';
+        while(buffer.length>0){
+          if(inThink){
+            const{idx,tag}=findFirst(buffer,CLOSE_TAGS);
+            if(idx!==-1){inThink=false;buffer=buffer.substring(idx+tag.length);}
+            else{const safe=Math.max(0,buffer.length-MAX_TAG_LEN);buffer=buffer.substring(safe);break;}
+          }else{
+            const{idx,tag}=findFirst(buffer,OPEN_TAGS);
+            if(idx!==-1){out+=buffer.substring(0,idx);inThink=true;buffer=buffer.substring(idx+tag.length);}
+            else{const safe=Math.max(0,buffer.length-MAX_TAG_LEN);out+=buffer.substring(0,safe);buffer=buffer.substring(safe);break;}
+          }
+        }
+        if(out.length)yield{type:'answer',text:out};
+      }
       continue;
     }
     // If we got native reasoning, content deltas are always answer
@@ -4215,29 +4235,6 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
       }
       // Only use heuristic truncation when no finish_reason arrived at all
       if(!wasTruncated&&!gotFinishReason&&looksMidSentence(answerText))wasTruncated=true;
-      if(!wasTruncated&&answerText&&!userSearchData&&allowSmartSearch&&!modeOn('image')&&detectUncertainty(answerText)){
-        showUserSearchInd();
-        const q=userQuery||baseMsgs.filter(m=>m.role==='user').slice(-1)[0]?.content||'';
-        const sd=await doSearch(q);hideUserSearchInd();
-        if(sd){
-          userSearchData=sd;userWantsSearch=true;
-          const ctx2=extraCtx+buildSearchCtx(sd);
-          if(txtEl)txtEl.innerHTML='<div class="activity-wrap" data-state="writing"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">Re-answering</div></div></div>';
-          answerText='';S.abort=new AbortController();
-          const _renderReAnswer=throttle(()=>{
-            if(!txtEl)return;
-            const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();
-            txtEl.innerHTML=(window.renderMd||renderMd)(answerText)+'<span class="stream-cur"></span>';
-            attachCodeBtns();if(S.settings.autoscroll)scrollBot();
-          },150);
-          for await(const chunk of streamParsed(baseMsgs,ctx2,modelKey,S.settings.longOutput||contMode?100000:16000,S.abort.signal,false,false,true)){
-            if(S.abort?.signal?.aborted)break;
-            if(chunk&&chunk.type==='finish'){if(isLengthFinish(chunk.reason))wasTruncated=true;continue;}
-            const txt=(chunk&&chunk.text)||'';if(!txt)continue;
-            answerText+=txt;
-            if(txtEl){const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();_renderReAnswer();}
-          }
-        }
       }
       if(txtEl){const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();txtEl.innerHTML=(window.renderMd||renderMd)(answerText||'');}
     }
