@@ -343,8 +343,6 @@ body.themed .mp-item.sel{border-color:var(--accent-border);background:var(--acce
 .mp-desc{font-size:11px;color:#555;line-height:1.3}
 .mp-item.sel .mp-desc{color:#777}
 
-#image-notice{display:none;text-align:center;font-size:10.5px;color:#ffe066;padding:6px 14px 0;line-height:1.5}
-#image-notice.show{display:block}
 .stream-cur{display:none;}
 
 /* ── FILE ATTACHMENT ── */
@@ -724,8 +722,7 @@ body.themed .speed-timer {
         </button>
       </div>
     </div>
-    <div id="image-notice"><span id="img-limit-display"></span></div>
-    <div id="humanizer-hint" style="display:none;text-align:center;font-size:10.5px;color:#fff;padding:6px 14px 0;line-height:1.5;opacity:0.7">Paste your text and send it will be humanized automatically.</div>
+<div id="humanizer-hint" style="display:none;text-align:center;font-size:10.5px;color:#fff;padding:6px 14px 0;line-height:1.5;opacity:0.7">Paste your text and send it will be humanized automatically.</div>
   </div>
 
   <!-- Three-dots floating menu -->
@@ -756,19 +753,7 @@ body.themed .speed-timer {
         </svg>
       </span>Code
     </div>
-    <div class="dm-item" id="dm-image" onclick="dmToggle('image')">
-      <span class="dm-item-icon">
-        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
-          <rect x="0" y="1" width="8" height="1"/><rect x="0" y="6" width="8" height="1"/>
-          <rect x="0" y="1" width="1" height="6"/><rect x="7" y="1" width="1" height="6"/>
-          <rect x="2" y="3" width="1" height="1"/>
-          <rect x="1" y="5" width="2" height="1"/><rect x="2" y="4" width="1" height="1"/>
-          <rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/>
-          <rect x="5" y="3" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/>
-          <rect x="3" y="5" width="4" height="1"/>
-        </svg>
-      </span>Image
-    </div>
+
     <div class="dm-item" id="dm-humanizer" onclick="dmToggle('humanizer')">
       <span class="dm-item-icon">
         <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
@@ -3128,7 +3113,6 @@ function resolveInputColor(){
   if(S.model==='VVV') return C.orange;
   if(modeOn('code'))  return C.green;
   if(modeOn('web'))   return C.blue;
-  if(modeOn('image')) return C.yellow;
   return C.grey;
 }
 function applyGlobalTheme(c){
@@ -3173,18 +3157,13 @@ function applyModeButtons(c){
     if(modeOn('code')){cb.style.borderColor=C.green.modeBorder;cb.style.color=C.green.modeText;cb.style.background=C.green.modeBg;}
     else{cb.style.borderColor='#2a2a2a';cb.style.color='#555';cb.style.background='transparent';}
   }
-  const ib=document.getElementById('image-btn');
-  if(ib){
-    if(modeOn('image')){ib.style.borderColor=C.yellow.modeBorder;ib.style.color=C.yellow.modeText;ib.style.background=C.yellow.modeBg;}
-    else{ib.style.borderColor='#2a2a2a';ib.style.color='#555';ib.style.background='transparent';}
-  }
   const hzb=document.getElementById('humanizer-btn');
   if(hzb){
     if(modeOn('humanizer')){hzb.style.borderColor='#fff';hzb.style.color='#fff';hzb.style.background='rgba(255,255,255,0.07)';}
     else{hzb.style.borderColor='#2a2a2a';hzb.style.color='#555';hzb.style.background='transparent';}
   }
   // Sync dots menu items
-  const modeMap={web:'dm-web',code:'dm-code',image:'dm-image',humanizer:'dm-humanizer'};
+  const modeMap={web:'dm-web',code:'dm-code',humanizer:'dm-humanizer'};
   for(const[mode,id] of Object.entries(modeMap)){
     const el=document.getElementById(id);if(!el)continue;
     if(modeOn(mode))el.classList.add('active');else el.classList.remove('active');
@@ -3209,7 +3188,7 @@ function openDotsMenu(e){
   // Apply capability gating to dm items
   const caps=(typeof modelCaps==='function')?modelCaps():(typeof CAPS!=='undefined'?(CAPS[S.model]||CAPS['0']):null);
   if(caps){
-    const modeGate={web:'dm-web',code:'dm-code',image:'dm-image',humanizer:'dm-humanizer'};
+    const modeGate={web:'dm-web',code:'dm-code',humanizer:'dm-humanizer'};
     for(const[cap,id] of Object.entries(modeGate)){
       const el=document.getElementById(id);if(!el)continue;
       const ok=caps[cap]!==false;
@@ -3339,7 +3318,7 @@ const USER_SEARCH_SKIP=[
 ];
 
 function queryNeedsSearch(text){
-  if(modeOn('image'))return false;
+  if(modeOn('humanizer'))return false;
   if(!text)return false;
   if(modeOn('web'))return true;
   if(!S.settings.webSearchAuto)return false;
@@ -3359,18 +3338,6 @@ function queryNeedsSearch(text){
   return USER_SEARCH_EXPLICIT.some(r=>r.test(t));
 }
 
-/* ─── SMART IMAGE INTENT ─── */
-const IMAGE_INTENT=[
-  /\b(draw|sketch|paint|illustrate|render)\s+(me\s+)?(a|an|the|some)?\s*\w/i,
-  /\b(generate|create|make|produce|give\s+me|show\s+me|design)\s+(a|an|the|some)?\s*(image|picture|photo|photograph|wallpaper|logo|icon|poster|art|artwork|drawing|illustration|painting|render)\b/i,
-  /\b(image|picture|photo|photograph|wallpaper|logo|icon|poster|art|artwork|drawing|illustration|painting)\s+of\b/i,
-  /\bvisuali[sz]e\b/i,
-];
-function looksLikeImageRequest(t){
-  if(!t)return false;
-  if(modeOn('humanizer')||modeOn('code')||modeOn('web'))return false;
-  return IMAGE_INTENT.some(r=>r.test(t));
-}
 
 async function doSearch(q){try{const r=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});if(!r.ok)return null;const d=await r.json();return(d.results?.length||d.answer)?d:null;}catch(e){return null;}}
 function buildSearchCtx(sd){if(!sd)return'';let c='\n\nRelevant web information:\n';if(sd.answer)c+='Summary: '+sd.answer+'\n';(sd.results||[]).forEach(r=>{let host='';try{host=new URL(r.url).hostname.replace('www.','');}catch(e){host='';}c+='- '+r.title+(host?' ('+host+')':'')+': '+r.snippet+'\n';});return c;}
@@ -3473,7 +3440,7 @@ function updateModelDescs(){
 
 /* ─── MODES ─── */
 /* Buttons disabled while humanizer is active. */
-const HUMANIZER_LOCK_BTNS=['think-btn','web-btn','code-btn','image-btn','attach-btn','three-dots-btn'];
+const HUMANIZER_LOCK_BTNS=['think-btn','web-btn','code-btn','attach-btn','three-dots-btn'];
 function applyHumanizerLock(){
   const on=S.modes&&S.modes.has&&S.modes.has('humanizer');
   HUMANIZER_LOCK_BTNS.forEach(id=>{
@@ -3483,7 +3450,7 @@ function applyHumanizerLock(){
   });
   // When locking ON: drop any other active modes and clear pending attachments.
   if(on){
-    ['think','web','code','image'].forEach(m=>S.modes.delete(m));
+    ['think','web','code'].forEach(m=>S.modes.delete(m));
     if(typeof _clearAllFiles==='function')_clearAllFiles();
     const fpp=document.getElementById('file-parse-progress');if(fpp){fpp.classList.remove('show');fpp.textContent='';}
     if(typeof updateReasoningBtn==='function')updateReasoningBtn();
@@ -3508,8 +3475,6 @@ function toggleMode(m){
   document.getElementById('model-btn').textContent=mDef.label;
   const inp=document.getElementById('user-input');
   if(inp)inp.placeholder=modeOn('code')?'Code with '+S.model+'...':mDef.placeholder;
-  document.getElementById('image-notice')?.classList.toggle('show',modeOn('image'));
-  if(modeOn('image')){if(typeof updateImgLimitDisplay==='function')updateImgLimitDisplay();else{const _ild=document.getElementById('img-limit-display');if(_ild)_ild.textContent='1 image per message';}}
   const hzHint=document.getElementById('humanizer-hint');
   if(hzHint)hzHint.style.display=modeOn('humanizer')?'block':'none';
   if(typeof updateReasoningBtn==='function')updateReasoningBtn();
@@ -3841,7 +3806,7 @@ function viewCode(btn){
 }
 </script>
 <script>
-function appendPending(id,isCodeMode,isImageMode){
+function appendPending(id,isCodeMode){
   const ca=document.getElementById('chat-area');if(!ca)return;
   const m=MODELS[S.model]||MODELS['0'];
   const row=document.createElement('div');
@@ -3849,11 +3814,7 @@ function appendPending(id,isCodeMode,isImageMode){
   row.id=id;
   if(isCodeMode)row.dataset.codemode='true';
 
-  if(isImageMode){
-    row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
-      <div class="ai-txt" id="${id}txt"><div class="activity-wrap" data-state="image"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">Generating image</div><div class="activity-sub" id="${id}sub">Creating your image…</div></div></div></div>
-    </div></div></div></div>`;
-  } else {
+  {
     const modelSupportsThinkNow=(typeof CAPS!=='undefined'&&CAPS[S.model]&&CAPS[S.model].think)||m.hasThink;
     if(modelSupportsThinkNow && modeOn('think')){
       row.innerHTML=`<div class="msg-in"><div class="msg-content"><img class="ai-av" src="icon.webp" alt=""/><div class="ai-body">
@@ -4453,7 +4414,6 @@ async function sendMsg(){
         if(userRow) ca.appendChild(userRow);
       }
       if(S.settings.speedTimer) startSpeedTimer();
-      if(modeOn('image')){ appendPending(aiId,icm,true); generateImage(aiId,text||fileNames.join(', '),c); return; }
       appendPending(aiId,icm,false); generate(c,aiId,null,text||fullContent,modeOn('web'),false,icm);
       return;
     }
@@ -4471,30 +4431,8 @@ async function sendMsg(){
       if(userRow) ca.appendChild(userRow);
     }
     if(S.settings.speedTimer) startSpeedTimer();
-    if(modeOn('image')){ appendPending(aiId,icm,true); generateImage(aiId,text,c); return; }
     appendPending(aiId,icm,false); generate(c,aiId,null,text,modeOn('web'),false,icm);
   }catch(e){console.error('sendMsg error:',e);showErr(e.message||'sendMsg failed');}
-}
-async function generateImage(aiId,prompt,convo){
-  try{
-    S.busy=true;
-    const txtEl=document.getElementById(aiId+'txt');
-    const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
-    if(txtEl){const aw=txtEl.querySelector('.activity-wrap,.vv-reply-loading,.answer-waiting,.loading');if(aw)aw.remove();}
-    let content='_(Image generation failed)_';
-    let imageUrl=null;
-    if(r.ok){
-      const d=await r.json();
-      if(d&&d.url){imageUrl=d.url;content='![Generated Image]('+d.url+')';}
-    }
-    convo.msgs.push({role:'assistant',content,ts:Date.now(),imageUrl,modelKey:S.model,codeMode:false,truncated:false});
-    const mi=convo.msgs.length-1;const fh=buildMsg(convo.msgs[mi],mi);
-    const tmp=document.createElement('div');tmp.innerHTML=fh;
-    const nr=tmp.firstElementChild;const pr=document.getElementById(aiId);
-    if(nr&&pr){nr.id=aiId;pr.replaceWith(nr);}
-    S.busy=false;saveStore();setStopMode(false);
-    stopSpeedTimer();
-  }catch(e){console.error('generateImage error:',e);showErr(e.message||'Image gen failed');S.busy=false;saveStore();setStopMode(false);stopSpeedTimer();}
 }
 function stopGen(){
   if(S.abort){try{S.abort.abort();}catch(e){}}
