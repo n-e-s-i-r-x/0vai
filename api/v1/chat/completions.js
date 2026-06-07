@@ -394,6 +394,14 @@ export default async function handler(req) {
 
             const raw = trimmed.slice(5).trim();
             if (raw === '[DONE]') {
+              // Flush buffered reasoning before [DONE] so clients receive it
+              if (!reasoningFlushed && reasoningBuffer) {
+                const cleaned = wrapReasoning(reasoningBuffer);
+                if (cleaned && cleaned.trim()) {
+                  emit(makeChunk({ reasoning_content: cleaned }, null));
+                }
+                reasoningFlushed = true;
+              }
               controller.enqueue(encoder.encode(SSE.done()));
               doneSent = true;
               continue;
