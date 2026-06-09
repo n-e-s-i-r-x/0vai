@@ -345,6 +345,37 @@ body.themed .mp-item.sel{border-color:var(--accent-border);background:var(--acce
 
 .stream-cur{display:none;}
 
+/* ── OTHER MODELS POPUP ── */
+#mp-other-btn{width:100%;margin-top:4px;padding:9px 12px;border-radius:10px;background:transparent;border:1px solid #222;color:#555;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s,border-color .2s,color .2s;}
+#mp-other-btn:active{background:#141414;color:#aaa;}
+#mp-other-btn .mp-other-chev{font-size:10px;transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+#mp-other-btn.open .mp-other-chev{transform:rotate(180deg);}
+body.themed #mp-other-btn{border-color:var(--accent-border);color:var(--accent);opacity:.5;}
+body.themed #mp-other-btn:active{opacity:.9;background:var(--accent-subtle);}
+body.themed #mp-other-btn.open{opacity:.9;}
+
+#mp-other-popup{position:fixed;z-index:9999;background:#0d0d0d;border:1px solid #222;border-radius:16px;padding:6px;width:260px;box-shadow:0 16px 48px rgba(0,0,0,.95);display:none;pointer-events:auto;transition:border-color .3s;}
+body.themed #mp-other-popup{border-color:var(--accent-border);}
+#mp-other-popup.open{display:block;animation:mpPop .18s cubic-bezier(.34,1.56,.64,1);}
+@keyframes mpOtherClose{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.9) translateY(6px)}}
+.mp-other-head{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555;padding:6px 10px 8px;}
+body.themed .mp-other-head{color:var(--accent);opacity:.5;}
+.mp-other-item{padding:11px 12px;border-radius:10px;cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .3s;margin-bottom:2px;display:flex;align-items:center;gap:10px;}
+.mp-other-item:last-child{margin-bottom:0;}
+.mp-other-item:active{opacity:.8;}
+.mp-other-item:hover{background:#141414;}
+.mp-other-item-ico{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.mp-other-item-info{flex:1;min-width:0;}
+.mp-other-item-name{font-size:13px;font-weight:700;color:#ddd;margin-bottom:2px;}
+.mp-other-item-desc{font-size:11px;color:#555;line-height:1.3;}
+#mp-other-overlay{position:fixed;inset:0;z-index:9998;display:none;background:transparent;}
+#mp-other-overlay.open{display:block;}
+
+/* ── VOID TOAST ── */
+#void-toast{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(12px);z-index:99999;background:#111;border:1px solid #2a2a2a;border-radius:12px;padding:11px 18px;font-size:13px;font-weight:600;color:#aaa;white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center;opacity:0;transition:none;}
+#void-toast.void-toast-show{opacity:1;transform:translateX(-50%) translateY(0);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.56,.64,1);}
+#void-toast.void-toast-hide{opacity:0;transform:translateX(-50%) translateY(6px);transition:opacity .6s ease .1s,transform .6s ease .1s;}
+
 /* ── FILE ATTACHMENT ── */
 #file-tray{display:none;flex-direction:row;flex-wrap:wrap;gap:6px;padding:6px 12px 4px;background:#000;}
 #file-tray.show{display:flex;}
@@ -829,6 +860,25 @@ body.themed .speed-timer {
   <div class="mp-item" id="mp-item-VVV" onclick="selectModel('VVV')">
     <div class="mp-label-row"><div class="mp-name">VVV</div><span class="mp-badge" style="color:#f97316;border:1px solid #3a1a00;">Einstein</span></div>
     <div class="mp-desc" id="mp-desc-VVV">Smartest.</div>
+  </div>
+  <div style="height:1px;background:#1e1e1e;margin:4px 0;"></div>
+  <button id="mp-other-btn" onclick="toggleOtherModels(event)">
+    <span>Other Models</span>
+    <span class="mp-other-chev">›</span>
+  </button>
+</div>
+
+<div id="mp-other-overlay" onclick="closeOtherModels()"></div>
+<div id="mp-other-popup">
+  <div class="mp-other-head">Other Models</div>
+  <div class="mp-other-item" onclick="selectOtherModel('voidv1flash')">
+    <div class="mp-other-item-ico">
+      <img src="icon.webp" alt="" style="width:22px;height:22px;object-fit:contain;border-radius:4px;" onerror="this.style.display='none'"/>
+    </div>
+    <div class="mp-other-item-info">
+      <div class="mp-other-item-name">Void V1 Flash</div>
+      <div class="mp-other-item-desc">Usable via Api Key only.</div>
+    </div>
   </div>
 </div>
 
@@ -3404,10 +3454,65 @@ function openModelPicker(e){
   ov.classList.add('open');popup.classList.add('open');
 }
 function closeModelPicker(){
+  closeOtherModels();
   const popup=document.getElementById('mp-popup');
   popup.style.animation='mpClose .15s cubic-bezier(.4,0,.2,1) forwards';
   setTimeout(()=>{popup.classList.remove('open');popup.style.animation='';},150);
   document.getElementById('mp-overlay').classList.remove('open');
+}
+
+/* ── OTHER MODELS POPUP ── */
+function toggleOtherModels(e){
+  e.stopPropagation();
+  const btn=document.getElementById('mp-other-btn');
+  const popup=document.getElementById('mp-other-popup');
+  const ov=document.getElementById('mp-other-overlay');
+  if(popup.classList.contains('open')){
+    closeOtherModels();return;
+  }
+  // Position popup to the right of or above mp-popup
+  const mpPopup=document.getElementById('mp-popup');
+  const mpRect=mpPopup.getBoundingClientRect();
+  const popW=260;
+  let left=mpRect.right+8;
+  if(left+popW>window.innerWidth-8)left=mpRect.left-popW-8;
+  if(left<8)left=8;
+  const bottom=window.innerHeight-mpRect.bottom;
+  popup.style.left=left+'px';
+  popup.style.bottom=bottom+'px';
+  popup.style.top='auto';
+  btn.classList.add('open');
+  ov.classList.add('open');
+  popup.classList.add('open');
+}
+function closeOtherModels(){
+  const btn=document.getElementById('mp-other-btn');
+  const popup=document.getElementById('mp-other-popup');
+  const ov=document.getElementById('mp-other-overlay');
+  popup.style.animation='mpOtherClose .15s cubic-bezier(.4,0,.2,1) forwards';
+  setTimeout(()=>{popup.classList.remove('open');popup.style.animation='';},150);
+  ov.classList.remove('open');
+  btn.classList.remove('open');
+}
+function selectOtherModel(key){
+  closeOtherModels();
+  closeModelPicker();
+  // Show a toast notification that fades out after 5s
+  let toast=document.getElementById('void-toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='void-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent='Usable only via Api Key. Go to sidebar > ApiKeys.';
+  toast.style.cssText='';
+  toast.classList.remove('void-toast-hide');
+  toast.classList.add('void-toast-show');
+  clearTimeout(toast._ot);
+  toast._ot=setTimeout(()=>{
+    toast.classList.remove('void-toast-show');
+    toast.classList.add('void-toast-hide');
+  },5000);
 }
 
 function selectModel(key){
