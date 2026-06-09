@@ -48,7 +48,7 @@ export default async function handler(req) {
   const seed = Math.floor(Math.random() * 2147483647);
   const encodedPrompt = encodeURIComponent(prompt);
 
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true&private=true`;
+  const url = `https://gen.pollinations.ai/image/${encodedPrompt}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true&private=true`;
 
   const ctrl = new AbortController();
   const timeoutId = setTimeout(() => ctrl.abort(), 60000);
