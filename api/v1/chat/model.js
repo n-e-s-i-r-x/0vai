@@ -9,7 +9,7 @@ const CORS_HEADERS = {
 const MODEL = {
   id:           'void-v1-flash',
   object:       'model',
-  created:      1700000000,
+  created:      1777939200,
   owned_by:     '0vai',
   name:         'Void V1 Flash',
   display_name: 'Void V1 Flash',
@@ -26,15 +26,15 @@ const MODEL = {
 
   top_provider: {
     context_length:        1000000,
-    max_completion_tokens: 32000,
+    max_completion_tokens: 163840,
     is_moderated:          false,
   },
 
   context_length:        1000000,
   context_window:        1000000,
-  max_output_tokens:     32000,
-  max_completion_tokens: 32000,
-  max_tokens:            32000,
+  max_output_tokens:     163840,
+  max_completion_tokens: 163840,
+  max_tokens:            163840,
 
   supported_parameters: [
     'reasoning_effort', 'reasoning', 'max_tokens',
