@@ -4325,7 +4325,13 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
       stopSpeedTimer();
       return;
     }else{
+      // Aborted by user (stop button) — clean up pending row, do NOT save or re-render
+      document.getElementById(aiId)?.remove();
       setStopMode(false);
+      hideUserSearchInd();
+      S.busy=false;S.abort=null;
+      stopSpeedTimer();
+      return;
     }
   }
 
