@@ -240,10 +240,10 @@ export default async function handler(req) {
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
-  // Default reasoning ON at medium - tools that auto-detect reasoning pass this,
-  // tools that don't will still get reasoning by default.
-  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : null);
-  const hasReasoning = resolvedReasoningEffort != null && resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
+  // Always enable reasoning - default to 'medium' if caller doesn't specify.
+  // External tools that don't send reasoning_effort still get reasoning.
+  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : 'medium');
+  const hasReasoning = resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
 
   const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
