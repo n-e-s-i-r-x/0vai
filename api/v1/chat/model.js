@@ -14,6 +14,7 @@ const MODEL = {
   name:         'Void V1 Flash',
   display_name: 'Void V1 Flash',
   description:  'Advanced MoE reasoning model by 0vai.',
+  icon_url:     'https://0vai.vercel.app/ico.webp',
   type:         'chat',
 
   architecture: {
@@ -46,6 +47,9 @@ const MODEL = {
     thinking: true, tools: true, streaming: true,
     function_calling: true, parallel_tool_calls: true,
   },
+
+  favicon_url:  'https://0vai.vercel.app/ico.webp',
+  logo_url:     'https://0vai.vercel.app/ico.webp',
 
   pricing: { prompt: '0', completion: '0', image: '0', request: '0' },
   per_request_limits: null,
