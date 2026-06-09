@@ -7,14 +7,28 @@ const CORS_HEADERS = {
 };
 
 const MODEL = {
-  id:           'Void V1 Flash',
+  id:           'void-v1-flash',
   object:       'model',
   created:      1700000000,
-  owned_by:     'void',
+  owned_by:     '0vai',
   name:         'Void V1 Flash',
   display_name: 'Void V1 Flash',
-  description:  'Void V1 Flash — advanced reasoning model by 0vai.',
+  description:  'Advanced MoE reasoning model by 0vai.',
   type:         'chat',
+
+  architecture: {
+    modality:          'text->text',
+    tokenizer:         'Other',
+    instruct_type:     'none',
+    num_parameters:    1000000000000,  // 1T total
+    active_parameters: 50000000000,   // 50B active (MoE)
+  },
+
+  top_provider: {
+    context_length:        1000000,
+    max_completion_tokens: 32000,
+    is_moderated:          false,
+  },
 
   context_length:        1000000,
   context_window:        1000000,
