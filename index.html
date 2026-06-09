@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="google-site-verification" content="wAaphsSfFeSSV4jeQIfjIFfXqnhO7kuofPJnRQz2-Fg"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-visual"/>
 <title>0v Ai Model that update it's own data in real time.</title>
 <meta name="description" content="It might be on a subdomain but don't judge it. this model can update it's own data in realtime by searching the web and learning every user's given message."/>
 <meta name="robots" content="index, follow"/>
@@ -36,7 +36,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100dvh;overflow:hidden;}
 :root{--app-font:"M",BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
-body{font-family:var(--app-font);background:#000;color:#fff;-webkit-font-smoothing:antialiased;font-size:16px;overscroll-behavior:none;}
+body{font-family:var(--app-font);background:#000;color:#fff;-webkit-font-smoothing:antialiased;font-size:16px;overscroll-behavior:none;overflow:hidden;position:fixed;width:100%;}
 button,input,textarea{font-family:var(--app-font);font-size:16px;color:inherit;}
 button{cursor:pointer;border:none;background:none;}
 input,textarea{outline:none;border:none;background:none;}
@@ -3437,8 +3437,21 @@ function formatDuration(secs){
 
 /* ─── Android keyboard resize fix ─── */
 function setAppHeight(){
-  const vh = window.innerHeight;
+  // visualViewport accounts for the on-screen keyboard on iOS/Android
+  // window.innerHeight does NOT update reliably when keyboard opens on iOS Safari
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const offsetTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
   document.documentElement.style.setProperty('--app-height', vh + 'px');
+  // Shift the fixed #app to stay aligned with the visible viewport
+  const app = document.getElementById('app');
+  if(app){
+    app.style.top = offsetTop + 'px';
+    app.style.height = vh + 'px';
+  }
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', setAppHeight);
+  window.visualViewport.addEventListener('scroll', setAppHeight);
 }
 window.addEventListener('resize', setAppHeight);
 setAppHeight();
