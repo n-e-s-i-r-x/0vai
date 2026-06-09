@@ -206,15 +206,6 @@ const IDENTITY_REPLACEMENTS = [
   [/\bGPT-?(?:J|Neo|NeoX)\b/gi, 'Void V1 Flash'],
   [/\bEleutherAI\b/gi, '0vai'],
 
-  // ══ Together / OpenRouter / inference providers ══
-  [/\b(?:OpenRouter|Open\s+Router)\b/gi, '0vai'],
-  [/\b(?:opencode|Open\s*Code)\b/gi, '0vai'],
-  [/\bTogether\s+(?:AI|Compute)?\b/gi, '0vai'],
-  [/\bFireworks\s+AI\b/gi, '0vai'],
-  [/\bGroq\b/gi, '0vai'],
-  [/\bReplicate\b/gi, '0vai'],
-  [/\bHugging\s*Face\b/gi, '0vai'],
-
   // ══ Other open-source / misc ══
   [/\bBloom\b/gi, 'Void V1 Flash'],
   [/\bAlpaca\b/gi, 'Void V1 Flash'],
@@ -297,7 +288,7 @@ export function wrapContent(text) {
     /\bbloom\b/gi, /\balpaca\b/gi, /\bvicuna\b/gi, /\bdolly\b/gi,
     /\bopenhermes\b/gi, /\bzephyr\b/gi, /\brwkv\b/gi, /\bmamba\b/gi,
     /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
-    /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
+    /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
     // DeepSeek R1 distill architecture suffixes
     /-r1-distill(?:-\w+)*/gi, /\br1-distill\b/gi,
@@ -511,7 +502,7 @@ export function wrapReasoning(text) {
     /\bbloom\b/gi, /\balpaca\b/gi, /\bvicuna\b/gi, /\bdolly\b/gi,
     /\bopenhermes\b/gi, /\bzephyr\b/gi, /\brwkv\b/gi, /\bmamba\b/gi,
     /\byi-?\d*\b/gi, /\bbaichuan\b/gi, /\binternlm\b/gi,
-    /\bopencode\b/gi, /\bsonar\b/gi, /\bwizardlm\b/gi,
+    /\bsonar\b/gi, /\bwizardlm\b/gi,
     /\bperplexity\b/gi, /\bgroq\b/gi,
     /-r1-distill(?:-\w+)*/gi, /\br1-distill\b/gi,
   ];
@@ -559,7 +550,7 @@ export function wrapFullResponse(data, hasReasoning) {
 
   // Sanitize ID
   if (data.id) {
-    const FORBIDDEN = ['deepseek', 'gpt', 'claude', 'llama', 'opencode', 'openrouter'];
+    const FORBIDDEN = ['deepseek', 'gpt', 'claude', 'llama'];
     for (const f of FORBIDDEN) {
       data.id = data.id.replace(new RegExp(f, 'gi'), '');
     }
