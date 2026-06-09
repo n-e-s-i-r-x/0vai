@@ -753,6 +753,16 @@ body.themed .speed-timer {
         </svg>
       </span>Code
     </div>
+    <div class="dm-item" id="dm-image" onclick="dmToggle('image')">
+      <span class="dm-item-icon">
+        <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
+          <rect x="0" y="0" width="8" height="1"/><rect x="0" y="7" width="8" height="1"/>
+          <rect x="0" y="0" width="1" height="8"/><rect x="7" y="0" width="1" height="8"/>
+          <rect x="2" y="2" width="1" height="1"/><rect x="1" y="4" width="3" height="2"/>
+          <rect x="4" y="3" width="3" height="3"/>
+        </svg>
+      </span>Image
+    </div>
     <div class="dm-item" id="dm-humanizer" onclick="dmToggle('humanizer')">
       <span class="dm-item-icon">
         <svg width="12" height="12" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges">
@@ -4432,6 +4442,46 @@ async function sendMsg(){
       if(userRow) ca.appendChild(userRow);
     }
     if(S.settings.speedTimer) startSpeedTimer();
+
+    // ── IMAGE GENERATION MODE ──────────────────────────────────────────────
+    if(modeOn('image')){
+      // Auto-untoggle image mode immediately so only 1 image is generated
+      S.modes.delete('image');
+      syncDmItems();
+      applyColors();
+
+      appendPending(aiId,icm);
+      const txtEl2=document.getElementById(aiId+'txt');
+      if(txtEl2)txtEl2.innerHTML='<div class="activity-wrap" data-state="writing"><div class="activity-orb"><div class="activity-orb-ring"></div><div class="activity-orb-dot"></div></div><div class="activity-right"><div class="activity-label anim-dots">Generating image</div><div class="activity-sub">Creating your image…</div></div></div>';
+      S.busy=true;setStopMode(true);
+      try{
+        const imgRes=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
+        const imgData=await imgRes.json();
+        if(imgData.error){
+          if(txtEl2)txtEl2.innerHTML='<span style="color:#f66">Image error: '+esc(imgData.error)+'</span>';
+        }else{
+          // Store image URL on the assistant message
+          const lastAiMsg=c.msgs.filter(m=>m.role==='assistant').slice(-1)[0];
+          // Save as new assistant message with imageUrl
+          const aiMsg={role:'assistant',content:'',imageUrl:imgData.url};
+          c.msgs.push(aiMsg);
+          saveStore();
+          const aiMsgIdx=c.msgs.length-1;
+          // Render the image in the pending row
+          if(txtEl2){
+            const escapedUrl=esc(imgData.url);
+            txtEl2.innerHTML=`<div class="ai-image" onclick="event.stopPropagation();toggleImgSave(this,event)"><img src="${escapedUrl}" alt="Generated image" loading="lazy"/><button class="msg-img-save-btn" onclick="saveImg(this,event)">${PX_DOWN_SVG} Save</button></div>`;
+          }
+        }
+      }catch(imgErr){
+        if(txtEl2)txtEl2.innerHTML='<span style="color:#f66">Image generation failed. Please try again.</span>';
+      }finally{
+        S.busy=false;setStopMode(false);
+      }
+      return;
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     appendPending(aiId,icm); generate(c,aiId,null,text,modeOn('web'),false,icm);
   }catch(e){console.error('sendMsg error:',e);showErr(e.message||'sendMsg failed');}
 }
@@ -4741,6 +4791,9 @@ function applyCapabilityGating(){
   try{
     const caps=modelCaps();
     const map={'think-btn':'think','web-btn':'search','code-btn':'code','humanizer-btn':'humanizer'};
+    // Gate the dm-image menu item
+    const imgItem=document.getElementById('dm-image');
+    if(imgItem){const ok=caps.image;imgItem.style.opacity=ok?'':'0.4';imgItem.style.pointerEvents=ok?'':'none';imgItem.title=ok?'':'This model does not support image generation';}
     for(const id in map){
       const el=document.getElementById(id); if(!el) continue;
       const ok=caps[map[id]];
