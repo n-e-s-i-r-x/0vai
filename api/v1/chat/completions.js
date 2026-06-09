@@ -46,11 +46,30 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-const PUBLIC_MODEL_NAME = 'voidv1-flash';
+// Echo back the caller's model ID in all responses so external tools
+// (OpenCode, Claude Code, Codex, Cursor, etc.) keep their reasoning-effort
+// UI active. They check the *response* model field for known substrings
+// like "deepseek-reasoner" / "o3" — if we returned "voidv1-flash" they'd
+// silently drop the reasoning picker. Defaulting to "deepseek-reasoner"
+// ensures new users who haven't configured a model ID still get it.
+const PUBLIC_MODEL_NAME = null; // resolved per-request below (see getPublicModelName)
 
 // 'strip'       - never send reasoning to client
 // 'passthrough' - sanitize and stream reasoning live (before content)
 const REASONING_MODE = 'passthrough';
+
+// Return a model ID that external tools will recognize as a reasoning model.
+// Tools check the response's "model" field for substrings like "deepseek-reasoner"
+// or "o3" to decide whether to show reasoning effort UI — "voidv1-flash" triggers
+// nothing. So we echo back whatever the caller sent (they picked it from our
+// /models list which now only lists "deepseek-reasoner"), and fall back to
+// "deepseek-reasoner" for any client that sends an unrecognized or empty ID.
+function getPublicModelName(_incomingModel) {
+  // Always return the branded name in responses — this is what tools display
+  // in chat history, usage logs, etc. Reasoning still works because upstream
+  // always gets deepseek-reasoner regardless of what the caller sent.
+  return 'Void V1 Flash';
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT - minimal formatting only, NO identity info.
@@ -242,6 +261,9 @@ export default async function handler(req) {
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
+  // Resolve the public model name once per request (echoes caller's model ID).
+  const publicModelName = getPublicModelName(model);
+
   // Always enable reasoning - default to 'medium' if caller doesn't specify.
   // External tools that don't send reasoning_effort still get reasoning.
   const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : 'medium');
@@ -323,7 +345,7 @@ export default async function handler(req) {
       id: sanitizeId(data?.id),
       object: 'chat.completion',
       created: data?.created || Math.floor(Date.now() / 1000),
-      model: PUBLIC_MODEL_NAME,
+      model: publicModelName,
       choices: [{
         index: 0,
         message: { role: 'assistant', content },
@@ -377,7 +399,7 @@ export default async function handler(req) {
         id: streamId,
         object: 'chat.completion.chunk',
         created: streamCreated,
-        model: PUBLIC_MODEL_NAME,
+        model: publicModelName,
         choices: [{ index: 0, delta, finish_reason: finishReason || null }],
       });
 
