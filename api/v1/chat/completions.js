@@ -243,7 +243,7 @@ export default async function handler(req) {
   // Always enable reasoning - default to 'medium' if caller doesn't specify.
   // External tools that don't send reasoning_effort still get reasoning.
   const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : 'medium');
-  const hasReasoning = resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0;
+  const hasReasoning = resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0 && resolvedReasoningEffort !== 'none';
 
   const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
@@ -259,12 +259,13 @@ export default async function handler(req) {
 
   if (hasReasoning) {
     const EFFORT_MAP = {
+      none:      'none',
       low:       'low',
       default:   'medium',
       medium:    'medium',
       high:      'high',
       extrahigh: 'high',
-      max:       'high',
+      max:       'max',
     };
     const effortStr = String(resolvedReasoningEffort).toLowerCase();
     const upstreamEffort = EFFORT_MAP[effortStr] ?? 'medium';
