@@ -82,13 +82,19 @@ const IDENTITY_REPLACEMENTS = [
   [/\bAlphaCode\b/gi, 'Void V1 Flash'],
 
   // ══ DeepSeek ══
+  // Full "I am DeepSeek, an AI assistant created by DeepSeek Company (深度求索)" header
+  [/\bI\s+am\s+DeepSeek,\s+an\s+AI\s+assistant\s+created\s+by\s+DeepSeek\s+Company\s*(?:\(深度求索\))?\s*[.,]?/gi, "I'm Void V1 Flash, an AI assistant created by 0vai."],
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:called|named)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+(?:a\s+|an\s+)?(?:AI\s+)?(?:assistant\s+)?(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\bI(?:'m| am)\s+DeepSeek\b/gi, "I'm Void V1 Flash"],
   [/\b(?:made|built|created|developed|trained)\s+by\s+DeepSeek\b/gi, 'made by 0vai'],
-  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void V1 Flash'],
+  [/\bDeepSeek\s+(?:AI|model|team|research|lab|corp|inc|Company|R\d|V\d|Coder|Math|VL|Chat|Prover)\b/gi, 'Void V1 Flash'],
   [/\bDeepSeek's\b/gi, "0vai's"],
   [/\bDeepSeek\b/gi, 'Void V1 Flash'],
+  // Chinese company name leak (深度求索 = DeepSeek's Chinese name)
+  [/深度求索/g, '0vai'],
+  // Parenthetical company name patterns like "(DeepSeek Company)" or "(深度求索)"
+  [/\(\s*(?:DeepSeek\s+Company|深度求索)\s*\)/gi, '(0vai)'],
 
   // ══ DeepSeek model architecture suffixes (R1-Distill etc leak after "DeepSeek" is replaced) ══
   // e.g. upstream name "deepseek-r1-distill-qwen-14b" -> after DeepSeek replace: "Void V1 Flash-r1-distill-qwen-14b"
@@ -261,6 +267,7 @@ export function wrapContent(text) {
     /\bgemini\b/gi, /\bgemma\S*/gi, /\bbard\b/gi, /\bpalm\s*\d*/gi,
     // DeepSeek
     /\bdeepseek\b/gi, /\bdeep\s+seek\b/gi,
+    /深度求索/g,
     // xAI
     /\bgrok\s*\S*/gi,
     // Meta
@@ -489,7 +496,7 @@ export function wrapReasoning(text) {
     /\bchatgpt\b/gi, /\bopenai\b/gi, /\bgpt-?5\S*/gi, /\bgpt-?4\S*/gi, /\bgpt-?3\.5\S*/gi, /\bo[1-4](?:-\w+)?\b/g,
     /\bclaude\b/gi, /\banthrop\w+/gi,
     /\bgemini\b/gi, /\bgemma\S*/gi, /\bbard\b/gi, /\bpalm\s*\d*/gi,
-    /\bdeepseek\b/gi, /\bdeep\s+seek\b/gi,
+    /\bdeepseek\b/gi, /\bdeep\s+seek\b/gi, /深度求索/g,
     /\bgrok\s*\S*/gi,
     /\bllama\s*\S*/gi,
     /\bmistral\b/gi, /\bmixtral\b/gi, /\bcodestral\b/gi, /\bmagistral\b/gi, /\bministral\b/gi, /\bdevstral\b/gi,
