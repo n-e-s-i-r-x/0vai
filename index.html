@@ -877,7 +877,7 @@ body.themed .speed-timer {
     </div>
     <div class="mp-other-item-info">
       <div class="mp-other-item-name">Void V1 Flash</div>
-      <div class="mp-other-item-desc">Flagship model for advanced intelligence.</div>
+      <div class="mp-other-item-desc">Usable via Api Key only.</div>
     </div>
   </div>
 </div>
@@ -1316,7 +1316,7 @@ body.themed .speed-timer {
 
     <!-- RATE LIMIT NOTICE -->
     <div class="ak-section" style="margin-bottom:20px;">
-      <div class="ak-section-title"><span class="ak-section-num" style="color:rgba(251,191,36,.8);background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2);">06</span> Rate Limits</div>
+      <div class="ak-section-title" style="border-left-color:rgba(251,191,36,.5);">Rate Limits</div>
       <div class="ak-callout" style="border-color:rgba(251,191,36,.15);background:rgba(251,191,36,.04);flex-direction:row;align-items:flex-start;gap:10px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
           <span style="font-size:12px;font-weight:700;color:rgba(251,191,36,.85);letter-spacing:.1px;">This API is free and IP rate limited.</span>
@@ -1325,12 +1325,20 @@ body.themed .speed-timer {
       </div>
     </div>
 
+    <!-- IMPORTANT: Data & Training Notice -->
+    <div class="ak-section" style="margin-bottom:20px;">
+      <div class="ak-section-title" style="border-left-color:rgba(239,68,68,.5);">Important</div>
+      <div class="ak-callout" style="border-color:rgba(239,68,68,.18);background:rgba(239,68,68,.04);flex-direction:column;gap:6px;">
+        <span style="font-size:11px;color:rgba(255,255,255,.38);line-height:1.6;">All messages and data sent through this platform are used for model training by default. Do not share passwords, credentials, or any sensitive information.</span>
+      </div>
+    </div>
+
     <!-- KEY + USE ON OTHER APPS: side by side -->
     <div class="ak-two-col">
 
       <!-- LEFT: Key -->
       <div class="ak-section">
-        <div class="ak-section-title"><span class="ak-section-num">01</span> API Key</div>
+        <div class="ak-section-title">API Key</div>
         <div class="ak-key-display">
           <code id="ak-key-value">void_sk_XXXXXXXXXXXXXXXXX</code>
           <button class="ak-key-action" onclick="copyApiKey()" title="Copy">
@@ -1344,7 +1352,7 @@ body.themed .speed-timer {
 
       <!-- RIGHT: Use on other apps -->
       <div class="ak-section">
-        <div class="ak-section-title"><span class="ak-section-num">02</span> Use on other apps</div>
+        <div class="ak-section-title">Use on other apps</div>
         <div class="ak-hint" style="margin:0 0 10px;">OpenAI-compatible, works in SillyTavern, Open WebUI, Cursor, Windsurf, etc.</div>
         <div class="ak-provider-grid">
           <div class="ak-pg-row">
@@ -1377,7 +1385,7 @@ body.themed .speed-timer {
 
       <!-- LEFT: Endpoint -->
       <div class="ak-section">
-        <div class="ak-section-title"><span class="ak-section-num">03</span> Endpoint</div>
+        <div class="ak-section-title">Endpoint</div>
         <div class="ak-endpoint">
           <div class="ak-ep-head">
             <span class="ak-method">POST</span>
@@ -1422,7 +1430,7 @@ print(r.json())<button class="ak-code-copy ak-example-copy" onclick="copyCode(th
 
       <!-- RIGHT: Errors -->
       <div class="ak-section">
-        <div class="ak-section-title"><span class="ak-section-num">04</span> Errors</div>
+        <div class="ak-section-title">Errors</div>
         <div class="ak-table">
           <div class="ak-tr ak-tr-2 ak-th"><div>Status</div><div>Meaning</div></div>
           <div class="ak-tr ak-tr-2"><div><code>400</code></div><div>Invalid JSON or missing <code>messages</code>.</div></div>
@@ -1439,7 +1447,7 @@ print(r.json())<button class="ak-code-copy ak-example-copy" onclick="copyCode(th
 
     <!-- REASONING EFFORT + TOOL COMPATIBILITY -->
     <div class="ak-section" style="margin-top:8px;">
-      <div class="ak-section-title"><span class="ak-section-num">05</span> Reasoning Effort &amp; Tool Compatibility</div>
+      <div class="ak-section-title">Reasoning Effort &amp; Tool Compatibility</div>
       <div class="ak-callout" style="border-color:rgba(74,222,128,.12);background:rgba(74,222,128,.03);margin-bottom:14px;">
         <span style="font-size:11.5px;font-weight:700;color:rgba(74,222,128,.8);display:block;margin-bottom:4px;">Automatic Reasoning Difficulty</span>
         <span style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;">Void V1 Flash exposes <code>reasoning_effort</code> natively via the <code>/api/v1/models</code> endpoint. Tools like <strong style="color:rgba(255,255,255,.6);">OpenCode Zen</strong>, <strong style="color:rgba(255,255,255,.6);">Claude Code</strong>, <strong style="color:rgba(255,255,255,.6);">Cursor</strong>, and <strong style="color:rgba(255,255,255,.6);">Windsurf</strong> automatically detect and surface a reasoning difficulty selector, no manual configuration needed.</span>
