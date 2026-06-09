@@ -422,27 +422,31 @@ export default async function handler(req) {
 
             const delta = choice.delta || {};
 
-            // ── Reasoning delta - stream LIVE, appears before content ──
-            // Upstream sends all reasoning_content chunks before any content
-            // chunks, so this naturally shows reasoning first.
+            // ── Reasoning delta - emit LIVE chunk by chunk ──
             if (hasReasoning && delta.reasoning_content != null && REASONING_MODE === 'passthrough') {
-              let r = delta.reasoning_content;
+              const r = delta.reasoning_content;
               if (r) {
                 reasoningBuffer += r;
-                reasoningHeaderSent = true; // mark that reasoning is flowing
+                reasoningHeaderSent = true;
+                emit(makeChunk({ reasoning_content: r }, null));
+              }
+            }
+
+            // ── Thinking field (some providers use this instead of reasoning_content) ──
+            if (hasReasoning && delta.thinking != null && REASONING_MODE === 'passthrough') {
+              const t = delta.thinking;
+              if (t) {
+                reasoningBuffer += t;
+                reasoningHeaderSent = true;
+                emit(makeChunk({ reasoning_content: t }, null));
               }
             }
 
             // ── Content delta - stream LIVE ──
             if (delta.content != null) {
-              // Flush buffered reasoning before first content chunk
-              if (!reasoningFlushed && reasoningBuffer) {
-                const cleaned = wrapReasoning(reasoningBuffer);
-                if (cleaned && cleaned.trim()) {
-                  emit(makeChunk({ reasoning_content: cleaned }, null));
-                }
-                reasoningFlushed = true;
-              }
+              // Mark reasoning done once content starts (already streamed live above)
+              if (!reasoningFlushed) reasoningFlushed = true;
+
               let c = delta.content;
 
               // Strip any embedded <think> tags in content field
@@ -454,15 +458,6 @@ export default async function handler(req) {
               if (!c) continue;
 
               emit(makeChunk({ content: c }, null));
-            }
-
-            // ── Thinking field (some providers use this instead of reasoning_content) ──
-            if (hasReasoning && delta.thinking != null && REASONING_MODE === 'passthrough') {
-              let t = delta.thinking;
-              if (t) {
-                reasoningBuffer += t;
-                reasoningHeaderSent = true;
-              }
             }
 
             // Finish reason chunk
