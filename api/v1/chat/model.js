@@ -6,7 +6,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
 };
 
-const SHARED = {
+const MODEL = {
+  id:           'Void V1 Flash',
   object:       'model',
   created:      1700000000,
   owned_by:     'void',
@@ -21,7 +22,6 @@ const SHARED = {
   max_completion_tokens: 32000,
   max_tokens:            32000,
 
-  // Every tool checks this array differently — cover all known strings
   supported_parameters: [
     'reasoning_effort', 'reasoning', 'max_tokens',
     'temperature', 'stream', 'tools', 'tool_choice', 'response_format',
@@ -47,36 +47,7 @@ export default function handler(req) {
       { status: 405, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
     );
 
-  // ── Why these specific IDs ──────────────────────────────────────────
-  //
-  // Every tool (OpenCode, Cursor, Windsurf, Claude Code, Continue, etc)
-  // checks if the model ID *contains* one of these exact substrings to
-  // decide whether to show the reasoning effort picker. It does NOT read
-  // any metadata fields from this JSON. The substring check is hardcoded
-  // in their source.
-  //
-  // Confirmed trigger strings (works in ALL tools):
-  //   "deepseek-reasoner"  → universally recognized, every tool has this
-  //   "deepseek-v4"        → OpenCode, Kilo, Cursor
-  //   "o3"                 → OpenCode, Cursor, Windsurf, Claude Code
-  //
-  // void-wrapper.js scrubs "deepseek" and "o3" from all responses, so
-  // the user always sees "Void V1 Flash" branding regardless of model ID.
-  // completions.js ignores the incoming model field and routes everything
-  // to deepseek-v4-flash-free upstream.
-  // ───────────────────────────────────────────────────────────────────
-
-  const models = [
-    // Primary — for your own web app
-    { ...SHARED, id: 'voidv1-flash' },
-
-    // Reasoning picker triggers — tell users to pick one of these in tools
-    { ...SHARED, id: 'deepseek-reasoner',   name: 'Void V1 Flash' },
-    { ...SHARED, id: 'deepseek-v4-flash',   name: 'Void V1 Flash' },
-    { ...SHARED, id: 'o3-mini',             name: 'Void V1 Flash' },
-  ];
-
-  return new Response(JSON.stringify({ object: 'list', data: models }), {
+  return new Response(JSON.stringify({ object: 'list', data: [MODEL] }), {
     status:  200,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
