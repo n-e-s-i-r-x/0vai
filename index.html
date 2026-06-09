@@ -4224,6 +4224,12 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         }else{break;}
       }
 
+      // If aborted (stop button), clean up and bail — do NOT save or re-render
+      if(S.abort?.signal?.aborted&&!internalSearchFired){
+        document.getElementById(aiId)?.remove();
+        setStopMode(false);hideUserSearchInd();S.busy=false;S.abort=null;stopSpeedTimer();return;
+      }
+
       // If model only produced reasoning and no answer, extract last paragraph of think
       // as a fallback answer but strip reasoning markers — keep think block intact
       if(!answerPhase){
@@ -4286,6 +4292,11 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         const txt=(chunk&&chunk.text)||'';if(!txt)continue;
         answerText+=txt;
         if(txtEl){const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();_renderNonThink();}
+      }
+      // If aborted (stop button), clean up and bail — do NOT save or re-render
+      if(S.abort?.signal?.aborted){
+        document.getElementById(aiId)?.remove();
+        setStopMode(false);hideUserSearchInd();S.busy=false;S.abort=null;stopSpeedTimer();return;
       }
       // Only use heuristic truncation when no finish_reason arrived at all
       if(!wasTruncated&&!gotFinishReason&&looksMidSentence(answerText))wasTruncated=true;
