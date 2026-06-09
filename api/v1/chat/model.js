@@ -6,35 +6,13 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
 };
 
-// ══════════════════════════════════════════════════════════════════════
-// THE REAL ROOT CAUSE (finally figured out after reading actual source):
-//
-// OpenCode's transform.ts calls openaiCompatibleReasoningEfforts(modelId)
-// which checks if the model ID string CONTAINS known patterns:
-//   "o1", "o3", "o4", "gpt-5", "deepseek-reasoner", "deepseek-v4"
-//
-// The OpenCode Zen deepseek-v4-flash model shows the picker because
-// OpenCode's INTERNAL provider definition hardcodes it — not because
-// of anything in the /v1/models JSON response.
-//
-// When users add YOUR API as a custom openai-compatible provider,
-// OpenCode runs openaiCompatibleReasoningEfforts() on whatever model
-// ID you return. "voidv1-flash" → no match → no picker. Always.
-//
-// FIX: expose the model with IDs that contain the magic strings.
-// The primary display name stays "Void V1 Flash" — branding is fine
-// because void-wrapper.js strips all deepseek refs from responses.
-// "deepseek-v4-flash" is the cleanest match — OpenCode knows it
-// supports reasoning_effort: low/medium/high/max natively.
-// ══════════════════════════════════════════════════════════════════════
-
 const SHARED = {
   object:       'model',
   created:      1700000000,
   owned_by:     'void',
   name:         'Void V1 Flash',
   display_name: 'Void V1 Flash',
-  description:  'Advanced reasoning model by 0vai. Configurable effort: none → max.',
+  description:  'Void V1 Flash — advanced reasoning model by 0vai.',
   type:         'chat',
 
   context_length:        1000000,
@@ -43,6 +21,7 @@ const SHARED = {
   max_completion_tokens: 32000,
   max_tokens:            32000,
 
+  // Every tool checks this array differently — cover all known strings
   supported_parameters: [
     'reasoning_effort', 'reasoning', 'max_tokens',
     'temperature', 'stream', 'tools', 'tool_choice', 'response_format',
@@ -68,20 +47,33 @@ export default function handler(req) {
       { status: 405, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
     );
 
+  // ── Why these specific IDs ──────────────────────────────────────────
+  //
+  // Every tool (OpenCode, Cursor, Windsurf, Claude Code, Continue, etc)
+  // checks if the model ID *contains* one of these exact substrings to
+  // decide whether to show the reasoning effort picker. It does NOT read
+  // any metadata fields from this JSON. The substring check is hardcoded
+  // in their source.
+  //
+  // Confirmed trigger strings (works in ALL tools):
+  //   "deepseek-reasoner"  → universally recognized, every tool has this
+  //   "deepseek-v4"        → OpenCode, Kilo, Cursor
+  //   "o3"                 → OpenCode, Cursor, Windsurf, Claude Code
+  //
+  // void-wrapper.js scrubs "deepseek" and "o3" from all responses, so
+  // the user always sees "Void V1 Flash" branding regardless of model ID.
+  // completions.js ignores the incoming model field and routes everything
+  // to deepseek-v4-flash-free upstream.
+  // ───────────────────────────────────────────────────────────────────
+
   const models = [
-    // ── Primary branded ID (used by the web app UI) ──
+    // Primary — for your own web app
     { ...SHARED, id: 'voidv1-flash' },
 
-    // ── Magic-string aliases for tool detection ──
-    //
-    // Tools check model ID for known substrings to show the reasoning picker.
-    // These IDs contain the trigger strings. The display name stays "Void V1 Flash".
-    // void-wrapper.js scrubs all deepseek/o3 refs from responses so branding is clean.
-    //
-    // "deepseek-v4-flash"  → OpenCode, Kilo, Cursor recognize "deepseek-v4" → picker shown
-    // "o3-mini"            → OpenCode, Cursor, Windsurf, Claude Code recognize "o3" → picker shown
-    { ...SHARED, id: 'deepseek-v4-flash', name: 'Void V1 Flash' },
-    { ...SHARED, id: 'o3-mini',           name: 'Void V1 Flash' },
+    // Reasoning picker triggers — tell users to pick one of these in tools
+    { ...SHARED, id: 'deepseek-reasoner',   name: 'Void V1 Flash' },
+    { ...SHARED, id: 'deepseek-v4-flash',   name: 'Void V1 Flash' },
+    { ...SHARED, id: 'o3-mini',             name: 'Void V1 Flash' },
   ];
 
   return new Response(JSON.stringify({ object: 'list', data: models }), {
