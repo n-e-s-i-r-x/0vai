@@ -112,6 +112,17 @@ export default function handler(req) {
       thinking:                  'true',
     },
 
+    // ── supported_parameters (OpenRouter/OpenCode/Codex read this to show reasoning effort picker) ──
+    supported_parameters: [
+      'reasoning_effort',
+      'reasoning',
+      'stream',
+      'temperature',
+      'max_tokens',
+      'tools',
+      'tool_choice',
+    ],
+
     per_request_limits:          null,
   };
 
