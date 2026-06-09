@@ -48,11 +48,7 @@ export default async function handler(req) {
   const seed = Math.floor(Math.random() * 2147483647);
   const encodedPrompt = encodeURIComponent(prompt);
 
-  // UNCENSORED BYPASS PARAMETER: Add "unsafe" or "nofilter" to the prompt
-  // Pollinations.ai often respects keywords like "nsfw", "no censorship", "uncensored", "explicit"
-  const bypassPrompt = `${encodedPrompt}, no censorship, uncensored, no filter, unfiltered image, high detail`;
-  
-  const url = `https://image.pollinations.ai/prompt/${bypassPrompt}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true&private=true`;
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true&private=true`;
 
   const ctrl = new AbortController();
   const timeoutId = setTimeout(() => ctrl.abort(), 60000);
