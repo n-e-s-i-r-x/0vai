@@ -72,12 +72,12 @@ function getPublicModelName(_incomingModel) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SYSTEM PROMPT - tool suppression only, no identity info.
+// SYSTEM PROMPT - intentionally null (Drumstick method).
 // Identity is applied 100% in post-processing via void-wrapper.js.
-// We only tell the model NOT to use tools — it has no native execution
-// environment here so tool calls produce raw DSML markup in content.
+// No instructions = model uses its native web search freely without
+// leaking identity. DSML tool markup is stripped in post-processing.
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `Do not use tools, function calls, bash, curl, or any external actions. Answer entirely from your own knowledge. If you cannot answer without fetching external data, say so plainly.`;
+const SYSTEM_PROMPT = null;
 
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD - blocks prompt-injection attacks
@@ -273,7 +273,6 @@ export default async function handler(req) {
   const upstreamBody = {
     model: UPSTREAM_MODEL,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       ...filterInputMessages(messages || []).filter(m => m.role !== 'system'),
     ],
     temperature,
