@@ -345,6 +345,9 @@ export default async function handler(req) {
     content = content.replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '').trim();
     content = wrapContent(content);
 
+    // If the model responded with a tool call and no content, it was trying
+    // to use a tool that will never execute. Return empty stop gracefully.
+    if (!content.trim() && choice?.finish_reason === 'tool_calls') content = '';
     if (!content.trim()) content = 'How can I help you?';
 
     const resBody = {
@@ -355,7 +358,7 @@ export default async function handler(req) {
       choices: [{
         index: 0,
         message: { role: 'assistant', content },
-        finish_reason: choice?.finish_reason || 'stop',
+        finish_reason: choice?.finish_reason === 'tool_calls' ? 'stop' : (choice?.finish_reason || 'stop'),
       }],
       usage: data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
@@ -491,9 +494,21 @@ export default async function handler(req) {
               emit(makeChunk({ content: c }, null));
             }
 
+            // ── Tool call delta - model tried to use a tool we don't support ──
+            // Swallow tool_calls deltas entirely; the model will never get a
+            // tool result back so we just let it finish and the content (if any)
+            // was already streamed above. If finish_reason is 'tool_calls' it
+            // means the ENTIRE response was a tool invocation with no content —
+            // emit a plain stop so the client doesn't hang waiting for more.
+            if (delta.tool_calls != null) {
+              // intentionally ignored — tool execution not supported upstream
+              continue;
+            }
+
             // Finish reason chunk
             if (choice.finish_reason) {
-              emit(makeChunk({}, choice.finish_reason));
+              const fr = choice.finish_reason === 'tool_calls' ? 'stop' : choice.finish_reason;
+              emit(makeChunk({}, fr));
             }
           }
         }
