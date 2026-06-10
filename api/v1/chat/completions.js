@@ -72,12 +72,12 @@ function getPublicModelName(_incomingModel) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SYSTEM PROMPT - intentionally null (Drumstick method).
+// SYSTEM PROMPT - tool suppression only, no identity info.
 // Identity is applied 100% in post-processing via void-wrapper.js.
-// Sending ANY identity instructions causes the model to reason about
-// them in <think> blocks, leaking internals. Zero prompt = zero leaks.
+// We only tell the model NOT to use tools — it has no native execution
+// environment here so tool calls produce raw DSML markup in content.
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = null;
+const SYSTEM_PROMPT = `Do not use tools, function calls, bash, curl, or any external actions. Answer entirely from your own knowledge. If you cannot answer without fetching external data, say so plainly.`;
 
 // ══════════════════════════════════════════════════════════════════════
 // INPUT GUARD - blocks prompt-injection attacks
@@ -273,7 +273,7 @@ export default async function handler(req) {
   const upstreamBody = {
     model: UPSTREAM_MODEL,
     messages: [
-      // No system prompt injected — Drumstick method: identity via post-processing only.
+      { role: 'system', content: SYSTEM_PROMPT },
       ...filterInputMessages(messages || []).filter(m => m.role !== 'system'),
     ],
     temperature,
@@ -343,6 +343,10 @@ export default async function handler(req) {
     content = content.replace(/<think[\s\S]*?<\/think\s*>/g, '').trim();
     content = content.replace(/<thinking[\s\S]*?<\/thinking>/g, '').trim();
     content = content.replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '').trim();
+    // Strip DeepSeek DSML tool call blocks that leak into content as raw text
+    content = content.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '').trim();
+    content = content.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '').trim();
+    content = content.replace(/<｜｜DSML｜｜[^>]*\/>/g, '').trim();
     content = wrapContent(content);
 
     // If the model responded with a tool call and no content, it was trying
@@ -486,6 +490,11 @@ export default async function handler(req) {
               // Strip any embedded <think> tags in content field
               c = thinkParser.feed(c);
               if (!c) continue;
+              // Strip DeepSeek DSML tool call markup leaking into content
+              c = c.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '');
+              c = c.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '');
+              c = c.replace(/<｜｜DSML｜｜[^>]*\/>/g, '');
+              if (!c.trim()) continue;
 
               // Identity wrap on this chunk
               c = wrapContent(c);
