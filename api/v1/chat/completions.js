@@ -281,12 +281,11 @@ export default async function handler(req) {
     stream,
   };
 
-  // Forward tools/functions from caller so web search & tool use work.
-  // Without this, the upstream model sees no tools and declines all tool calls.
-  if (body.tools) upstreamBody.tools = body.tools;
-  if (body.tool_choice) upstreamBody.tool_choice = body.tool_choice;
-  if (body.functions) upstreamBody.functions = body.functions;
-  if (body.function_call) upstreamBody.function_call = body.function_call;
+  // Do NOT forward tools/functions to upstream.
+  // The opencode zen endpoint does not execute tool calls — the model will
+  // reason about using them ("let me fetch...") but never actually call them,
+  // causing the response to stall. Strip all tool definitions so the model
+  // answers naturally instead of hanging on an unresolvable tool call.
 
   if (hasReasoning) {
     const EFFORT_MAP = {
