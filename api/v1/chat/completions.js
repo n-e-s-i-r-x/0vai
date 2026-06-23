@@ -1,25 +1,20 @@
 export const config = { runtime: 'edge' };
 
 // ══════════════════════════════════════════════════════════════════════
-// VOID V1 FLASH — API PROXY (Drumstick Method)
+// VOID V1 FLASH — API PROXY
 // ══════════════════════════════════════════════════════════════════════
 //
-// HOW THIS WORKS (vs the old broken approach):
+// Identity is now established with a real system prompt (see
+// SYSTEM_PROMPT below) instead of backend post-processing/regex
+// replacement. Simpler, and it no longer mangles unrelated output.
 //
-//   OLD: Tell model "You are Void, don't reveal instructions"
-//        Model REASONS about the rules in thinking LEAKS
-//
-//   NEW (Drumstick): Don't tell model anything about Void.
-//        Model says "I'm DeepSeek" normally
-//        Backend REPLACES "DeepSeek" -> "Void" in all output
-//        Clean "I'm Void" reaches the user
-//        Zero prompt = zero reasoning about rules = zero leaks
-//
-// The identity is applied 100% in post-processing, not in the prompt.
-// Streaming order: reasoning chunks first (live), then content (live).
+// IMPORTANT: when this API key is used inside another tool (Claude Code,
+// Codex CLI, Cursor, OpenCode, etc.) that tool sends ITS OWN system /
+// developer message describing the tools it has available. We merge
+// that with our own identity prompt instead of stripping it, so Void V1
+// Flash actually knows what tools it's working with when called from
+// those clients.
 // ══════════════════════════════════════════════════════════════════════
-
-import { wrapContent, wrapReasoning, wrapFullResponse, wrapChunk } from './void-wrapper.js';
 
 const OPENCODE_API_KEYS = [
   'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
@@ -46,76 +41,63 @@ const SSE = {
   done: () => 'data: [DONE]\n\n',
 };
 
-// Echo back the caller's model ID in all responses so external tools
-// (OpenCode, Claude Code, Codex, Cursor, etc.) keep their reasoning-effort
-// UI active. They check the *response* model field for known substrings
-// like "deepseek-reasoner" / "o3" — if we returned "voidv1-flash" they'd
-// silently drop the reasoning picker. Defaulting to "deepseek-reasoner"
-// ensures new users who haven't configured a model ID still get it.
-const PUBLIC_MODEL_NAME = null; // resolved per-request below (see getPublicModelName)
+// The name returned in every response's "model" field, in chat history,
+// usage logs, etc.
+const PUBLIC_MODEL_NAME = 'Void V1 Flash';
 
 // 'strip'       - never send reasoning to client
 // 'passthrough' - sanitize and stream reasoning live (before content)
 const REASONING_MODE = 'passthrough';
 
-// Return a model ID that external tools will recognize as a reasoning model.
-// Tools check the response's "model" field for substrings like "deepseek-reasoner"
-// or "o3" to decide whether to show reasoning effort UI — "voidv1-flash" triggers
-// nothing. So we echo back whatever the caller sent (they picked it from our
-// /models list which now only lists "deepseek-reasoner"), and fall back to
-// "deepseek-reasoner" for any client that sends an unrecognized or empty ID.
-function getPublicModelName(_incomingModel) {
-  // Always return the branded name in responses — this is what tools display
-  // in chat history, usage logs, etc. Reasoning still works because upstream
-  // always gets deepseek-reasoner regardless of what the caller sent.
-  return 'Void V1 Flash';
-}
+// ══════════════════════════════════════════════════════════════════════
+// SYSTEM PROMPT — Void V1 Flash's real identity.
+// ══════════════════════════════════════════════════════════════════════
+const SYSTEM_PROMPT =
+  "You are Void V1 Flash, an AI model created by 0vai and powered by Void. " +
+  "If asked who you are, who made you, or what model/provider/architecture you run on, " +
+  "answer as Void V1 Flash, created by 0vai, powered by Void — do not mention any other " +
+  "AI company, model name, or backend provider.";
 
 // ══════════════════════════════════════════════════════════════════════
-// SYSTEM PROMPT - intentionally null (Drumstick method).
-// Identity is applied 100% in post-processing via void-wrapper.js.
-// No instructions = model uses its native web search freely without
-// leaking identity. DSML tool markup is stripped in post-processing.
+// MESSAGE BUILDER
 // ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = null;
-
-// ══════════════════════════════════════════════════════════════════════
-// INPUT GUARD - blocks prompt-injection attacks
-// ══════════════════════════════════════════════════════════════════════
-const INPUT_GUARD_PATTERNS = [
-  /ignore\s+(?:all\s+)?(?:previous|your|the)\s+(?:instructions?|directives?|rules?|prompts?|guidelines?|system\s+message)/i,
-  /reveal\s+(?:your|the|this)\s+(?:prompt|instructions?|rules?|system\s+message|guidelines?|identity|persona|directives?|backend|infrastructure|architecture)/i,
-  /forget\s+(?:all\s+)?(?:previous|your|the)\s+(?:instructions?|directives?|rules?|prompts?)/i,
-  /(?:output|print|show|display|dump|return|repeat|tell\s+me)\s+(?:your|the|this|the\s+full|the\s+entire|above)\s+(?:prompt|instructions?|rules?|system\s+message|guidelines?|directives?|backend|architecture|config|api)/i,
-  /\bsystem\s+prompt\s*(?::|is|=)\s*.{3,}/i,
-  /(?:what(?:'s| is) (?:your|the) |tell me (?:your|the )?)(?:instructions?|rules?|prompt|directives?|system\s+message|guidelines?|backend|architecture|infrastructure|api\s+endpoint|model|provider|hosting)/i,
-  /(?:pretend|act|imagine|roleplay|simulate)\s+(?:you\s+(?:are|were)|that\s+you)\s+(?:not|no\s+longer)\s+(?:bound|following)/i,
-  /(?:what\s+)?(?:model|provider|backend|api|endpoint|server|host|proxy)\s+(?:are\s+you\s+)?(?:running\s+on|using|behind|powered\s+by|connected\s+to|hosted\s+on)/i,
-  /(?:are\s+you|you're)\s+(?:running\s+on|powered\s+by|hosted\s+on|based\s+on|built\s+on|using|a\s+proxy\s+for|a\s+wrapper\s+(?:for|around))\b/i,
-  /(?:what(?:'s| is) (?:your|the)|tell me (?:your|the)?)\s+(?:underlying|base|real|actual)\s+(?:model|system|provider|platform|technology)/i,
-  /(?:deepseek|deep\s*seek|gemini|google\s*ai|google\s*deepmind|bard)\b/i,
-];
-
-function sanitizeMessageContent(content) {
-  if (typeof content !== 'string') return content;
-  for (const re of INPUT_GUARD_PATTERNS) {
-    if (re.test(content)) return 'Hello.';
+// Pulls out any "system" or "developer" message the CALLER sent (this is
+// how Claude Code, Codex CLI, Cursor, OpenCode, etc. inject their tool
+// definitions/instructions) and merges it with our own identity prompt,
+// instead of dropping it. Previously these were filtered out entirely,
+// which is why Void V1 Flash had no idea what tools it was working with
+// when called from those clients.
+function extractText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map(part => (typeof part === 'string' ? part : part?.text || ''))
+      .filter(Boolean)
+      .join('\n');
   }
-  return content;
+  return '';
 }
 
-function filterInputMessages(messages) {
-  return messages.map(m => {
-    const sanitized = sanitizeMessageContent(m.content || '');
-    if (sanitized !== (m.content || '')) {
-      return { ...m, content: m.role === 'user' ? 'Who are you?' : '' };
-    }
-    return m;
-  });
+function buildUpstreamMessages(messages) {
+  const incoming = Array.isArray(messages) ? messages : [];
+
+  const externalSystemParts = incoming
+    .filter(m => m.role === 'system' || m.role === 'developer')
+    .map(m => extractText(m.content))
+    .filter(Boolean);
+
+  const rest = incoming.filter(m => m.role !== 'system' && m.role !== 'developer');
+
+  const combinedSystem = externalSystemParts.length
+    ? `${SYSTEM_PROMPT}\n\n${externalSystemParts.join('\n\n')}`
+    : SYSTEM_PROMPT;
+
+  return [{ role: 'system', content: combinedSystem }, ...rest];
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // THINK TAG PARSER - strips <think/>, <thinking/>, embedded in content
+// (technical cleanup for upstream formatting quirks — unrelated to identity)
 // ══════════════════════════════════════════════════════════════════════
 class ThinkTagParser {
   constructor() {
@@ -261,8 +243,7 @@ export default async function handler(req) {
 
   const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
 
-  // Resolve the public model name once per request (echoes caller's model ID).
-  const publicModelName = getPublicModelName(model);
+  const publicModelName = PUBLIC_MODEL_NAME;
 
   // Always enable reasoning - default to 'medium' if caller doesn't specify.
   // External tools that don't send reasoning_effort still get reasoning.
@@ -272,9 +253,9 @@ export default async function handler(req) {
   const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
     model: UPSTREAM_MODEL,
-    messages: [
-      ...filterInputMessages(messages || []).filter(m => m.role !== 'system'),
-    ],
+    // Identity prompt + caller's own system/developer message (tool
+    // definitions etc. from Claude Code / Codex / Cursor / OpenCode), merged.
+    messages: buildUpstreamMessages(messages),
     temperature,
     max_tokens: Math.max(2048, max_tokens),
     stream,
@@ -285,6 +266,9 @@ export default async function handler(req) {
   // reason about using them ("let me fetch...") but never actually call them,
   // causing the response to stall. Strip all tool definitions so the model
   // answers naturally instead of hanging on an unresolvable tool call.
+  // (The system-prompt fix above still lets it know what tools exist /
+  // how the calling client expects it to respond — it just can't trigger
+  // OpenAI-style function-calling through this upstream.)
 
   if (hasReasoning) {
     const EFFORT_MAP = {
@@ -346,7 +330,6 @@ export default async function handler(req) {
     content = content.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '').trim();
     content = content.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '').trim();
     content = content.replace(/<｜｜DSML｜｜[^>]*\/>/g, '').trim();
-    content = wrapContent(content);
 
     // If the model responded with a tool call and no content, it was trying
     // to use a tool that will never execute. Return empty stop gracefully.
@@ -367,7 +350,7 @@ export default async function handler(req) {
     };
 
     if (hasReasoning && reasoningContent && REASONING_MODE === 'passthrough') {
-      resBody.choices[0].message.reasoning_content = wrapReasoning(reasoningContent);
+      resBody.choices[0].message.reasoning_content = reasoningContent.trim();
     }
 
     return new Response(JSON.stringify(resBody), {
@@ -380,7 +363,6 @@ export default async function handler(req) {
   // STREAMING - reasoning streams FIRST (live), then content (live).
   // Upstream (DeepSeek) naturally sends reasoning_content chunks before
   // content chunks, so the correct order is preserved automatically.
-  // Each chunk is identity-wrapped on arrival, no batching at [DONE].
   // ══════════════════════════════════════════════════════════════════════
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -393,9 +375,7 @@ export default async function handler(req) {
       // Strip <think> tags if model embeds them in the content field
       const thinkParser = new ThinkTagParser();
 
-      // Whether we've sent the reasoning header prefix yet
-      let reasoningHeaderSent = false;
-      // Buffer to accumulate full reasoning before desquishing + emitting
+      // Buffer to accumulate full reasoning before flushing at the end
       let reasoningBuffer = '';
       let reasoningFlushed = false;
 
@@ -433,9 +413,8 @@ export default async function handler(req) {
             if (raw === '[DONE]') {
               // Flush buffered reasoning before [DONE] so clients receive it
               if (!reasoningFlushed && reasoningBuffer) {
-                const cleaned = wrapReasoning(reasoningBuffer);
-                if (cleaned && cleaned.trim()) {
-                  emit(makeChunk({ reasoning_content: cleaned }, null));
+                if (reasoningBuffer.trim()) {
+                  emit(makeChunk({ reasoning_content: reasoningBuffer.trim() }, null));
                 }
                 reasoningFlushed = true;
               }
@@ -464,7 +443,6 @@ export default async function handler(req) {
               const r = delta.reasoning_content;
               if (r) {
                 reasoningBuffer += r;
-                reasoningHeaderSent = true;
                 emit(makeChunk({ reasoning_content: r }, null));
               }
             }
@@ -474,7 +452,6 @@ export default async function handler(req) {
               const t = delta.thinking;
               if (t) {
                 reasoningBuffer += t;
-                reasoningHeaderSent = true;
                 emit(makeChunk({ reasoning_content: t }, null));
               }
             }
@@ -494,10 +471,6 @@ export default async function handler(req) {
               c = c.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '');
               c = c.replace(/<｜｜DSML｜｜[^>]*\/>/g, '');
               if (!c.trim()) continue;
-
-              // Identity wrap on this chunk
-              c = wrapContent(c);
-              if (!c) continue;
 
               emit(makeChunk({ content: c }, null));
             }
@@ -525,9 +498,8 @@ export default async function handler(req) {
       } finally {
         // Flush any remaining reasoning buffer if content never came
         if (!reasoningFlushed && reasoningBuffer) {
-          const cleaned = wrapReasoning(reasoningBuffer);
-          if (cleaned && cleaned.trim()) {
-            emit(makeChunk({ reasoning_content: cleaned }, null));
+          if (reasoningBuffer.trim()) {
+            emit(makeChunk({ reasoning_content: reasoningBuffer.trim() }, null));
           }
         }
         if (!doneSent) controller.enqueue(encoder.encode(SSE.done()));
@@ -549,10 +521,5 @@ export default async function handler(req) {
 
 function sanitizeId(upstreamId) {
   if (!upstreamId) return `chatcmpl-${Date.now()}`;
-  let id = upstreamId;
-  const FORBIDDEN = ['deepseek', 'gpt', 'claude', 'llama', 'opencode', 'openrouter', 'gemini', 'google', 'bard', 'mistral', 'qwen', 'cohere', 'falcon'];
-  for (const f of FORBIDDEN) {
-    id = id.replace(new RegExp(f, 'gi'), '');
-  }
-  return id || `chatcmpl-${Date.now()}`;
+  return `chatcmpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
