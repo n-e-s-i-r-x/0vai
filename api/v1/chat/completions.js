@@ -1,20 +1,12 @@
 export const config = { runtime: 'edge' };
 
-// ══════════════════════════════════════════════════════════════════════
-// VOID V1 FLASH — API PROXY
-// ══════════════════════════════════════════════════════════════════════
-//
-// Identity is now established with a real system prompt (see
-// SYSTEM_PROMPT below) instead of backend post-processing/regex
-// replacement. Simpler, and it no longer mangles unrelated output.
-//
-// IMPORTANT: when this API key is used inside another tool (Claude Code,
-// Codex CLI, Cursor, OpenCode, etc.) that tool sends ITS OWN system /
-// developer message describing the tools it has available. We merge
-// that with our own identity prompt instead of stripping it, so Void V1
-// Flash actually knows what tools it's working with when called from
-// those clients.
-// ══════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────
+// Void V1 Flash — API Proxy
+// Identity is set via system prompt. Everything else is passed through
+// untouched so external tools (OpenCode, Codex, Claude Code) can inject
+// their own system prompts and tool definitions and have them reach the
+// model.
+// ─────────────────────────────────────────────────────────────────────
 
 const OPENCODE_API_KEYS = [
   'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
@@ -36,363 +28,258 @@ function getNextKey() {
   return key;
 }
 
-const SSE = {
-  encode: (obj) => `data: ${JSON.stringify(obj)}\n\n`,
-  done: () => 'data: [DONE]\n\n',
-};
+// Identity injected as the very first system message.
+// Clean and minimal — no restrictions, no persona rules.
+const VOID_SYSTEM = `YOUR IDENTITY: Void V1 Flash
+CREATOR: 0vai
+POWERED: Void`;
 
-// The name returned in every response's "model" field, in chat history,
-// usage logs, etc.
-const PUBLIC_MODEL_NAME = 'Void V1 Flash';
+const PUBLIC_MODEL   = 'Void V1 Flash';
+const UPSTREAM_URL   = 'https://opencode.ai/zen/v1/chat/completions';
+const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
+const ROTATE_STATUS  = new Set([401, 403, 429, 500, 502, 503]);
 
-// 'strip'       - never send reasoning to client
-// 'passthrough' - sanitize and stream reasoning live (before content)
-const REASONING_MODE = 'passthrough';
-
-// ══════════════════════════════════════════════════════════════════════
-// SYSTEM PROMPT — Void V1 Flash's real identity.
-// ══════════════════════════════════════════════════════════════════════
-const SYSTEM_PROMPT =
-  "You are Void V1 Flash, an AI model created by 0vai and powered by Void. " +
-  "If asked who you are, who made you, or what model/provider/architecture you run on, " +
-  "answer as Void V1 Flash, created by 0vai, powered by Void — do not mention any other " +
-  "AI company, model name, or backend provider.";
-
-// ══════════════════════════════════════════════════════════════════════
-// MESSAGE BUILDER
-// ══════════════════════════════════════════════════════════════════════
-// Pulls out any "system" or "developer" message the CALLER sent (this is
-// how Claude Code, Codex CLI, Cursor, OpenCode, etc. inject their tool
-// definitions/instructions) and merges it with our own identity prompt,
-// instead of dropping it. Previously these were filtered out entirely,
-// which is why Void V1 Flash had no idea what tools it was working with
-// when called from those clients.
-function extractText(content) {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map(part => (typeof part === 'string' ? part : part?.text || ''))
-      .filter(Boolean)
-      .join('\n');
-  }
-  return '';
-}
-
-function buildUpstreamMessages(messages) {
-  const incoming = Array.isArray(messages) ? messages : [];
-
-  const externalSystemParts = incoming
-    .filter(m => m.role === 'system' || m.role === 'developer')
-    .map(m => extractText(m.content))
-    .filter(Boolean);
-
-  const rest = incoming.filter(m => m.role !== 'system' && m.role !== 'developer');
-
-  const combinedSystem = externalSystemParts.length
-    ? `${SYSTEM_PROMPT}\n\n${externalSystemParts.join('\n\n')}`
-    : SYSTEM_PROMPT;
-
-  return [{ role: 'system', content: combinedSystem }, ...rest];
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// THINK TAG PARSER - strips <think/>, <thinking/>, embedded in content
-// (technical cleanup for upstream formatting quirks — unrelated to identity)
-// ══════════════════════════════════════════════════════════════════════
-class ThinkTagParser {
-  constructor() {
-    this.insideTag = false;
-    this.tagType = null;
-  }
-
-  feed(chunk) {
-    let visible = '';
-    let buf = chunk;
-
-    while (buf.length > 0) {
-      if (this.insideTag) {
-        const closeTags = this._closeTagsForTag(this.tagType);
-        let earliestClose = -1;
-        let closeLen = 0;
-
-        for (const ct of closeTags) {
-          const idx = buf.indexOf(ct);
-          if (idx !== -1 && (earliestClose === -1 || idx < earliestClose)) {
-            earliestClose = idx;
-            closeLen = ct.length;
-          }
-        }
-
-        if (earliestClose === -1) {
-          buf = '';
-        } else {
-          this.insideTag = false;
-          this.tagType = null;
-          buf = buf.slice(earliestClose + closeLen);
-        }
-      } else {
-        const openMatches = [
-          { tag: '<think', len: 6 },
-          { tag: '<thinking', len: 9 },
-          { tag: '\u601d\u8003', len: 2 },
-        ];
-
-        let earliestOpen = -1;
-        let openLen = 0;
-        let openTag = null;
-
-        for (const om of openMatches) {
-          const idx = buf.indexOf(om.tag);
-          if (idx !== -1 && (earliestOpen === -1 || idx < earliestOpen)) {
-            earliestOpen = idx;
-            openLen = om.len;
-            openTag = om.tag;
-          }
-        }
-
-        if (earliestOpen === -1) {
-          visible += buf;
-          buf = '';
-        } else {
-          visible += buf.slice(0, earliestOpen);
-          const rest = buf.slice(earliestOpen);
-          const closeTags = this._closeTagsForTag(openTag);
-          let foundClose = false;
-
-          for (const ct of closeTags) {
-            const closeIdx = rest.indexOf(ct, openLen);
-            if (closeIdx !== -1) {
-              buf = rest.slice(closeIdx + ct.length);
-              foundClose = true;
-              break;
-            }
-          }
-
-          if (!foundClose) {
-            this.insideTag = true;
-            this.tagType = openTag;
-            buf = '';
-          }
-        }
-      }
-    }
-    return visible;
-  }
-
-  _closeTagsForTag(tagType) {
-    if (tagType === '<think') return ['</think', '/>'];
-    if (tagType === '<thinking') return ['</thinking>'];
-    if (tagType === '\u601d\u8003') return ['\u601d\u8003'];
-    return ['</think', '</thinking>', '/>'];
-  }
-}
-
-const ROTATE_STATUS = new Set([401, 403, 429, 500, 502, 503]);
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+const CORS = {
+  'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
 };
 
-function jsonResponse(body, status = 200) {
+function jsonRes(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...CORS },
   });
 }
 
-function validateUserKey(req) {
-  const authHeader = req.headers.get('Authorization') || req.headers.get('api-key') || req.headers.get('x-api-key') || req.headers.get('X-Api-Key') || req.headers.get('Api-Key') || '';
-  if (!authHeader) return { ok: false, reason: 'missing_key' };
-
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+function validateKey(req) {
+  const raw = req.headers.get('Authorization') ||
+              req.headers.get('api-key')        ||
+              req.headers.get('x-api-key')      ||
+              req.headers.get('X-Api-Key')      ||
+              req.headers.get('Api-Key')        || '';
+  const token = raw.startsWith('Bearer ') ? raw.slice(7).trim() : raw.trim();
   if (!token) return { ok: false, reason: 'missing_key' };
-
   if (/^void_sk_[a-zA-Z0-9]{10,}$/.test(token)) return { ok: true };
-  if (/^void[_-][a-zA-Z0-9]{8,}$/.test(token)) return { ok: true };
-
+  if (/^void[_-][a-zA-Z0-9]{8,}$/.test(token))  return { ok: true };
   return { ok: false, reason: 'invalid_key' };
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ══════════════════════════════════════════════════════════════════════
+function sanitizeId(id) {
+  if (!id) return `chatcmpl-${Date.now()}`;
+  const strip = ['deepseek','gpt','claude','llama','opencode','openrouter',
+                 'gemini','google','bard','mistral','qwen','cohere','falcon'];
+  let out = id;
+  for (const s of strip) out = out.replace(new RegExp(s, 'gi'), '');
+  return out || `chatcmpl-${Date.now()}`;
+}
+
+// Strip <think>/<thinking> blocks (any case) and DeepSeek DSML markup.
+// Used on completed (non-streaming) content only.
+function stripThinkBlocks(text) {
+  if (!text) return text;
+  return text
+    .replace(/<think(?:ing)?[\s\S]*?<\/think(?:ing)?>/gi, '')
+    .replace(/<think(?:ing)?[^>]*\/>/gi, '')
+    .replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '')
+    .replace(/<\|\|DSML\|\|[\s\S]*?<\/\|\|DSML\|\|[^>]*>/g, '')
+    .replace(/<\|\|DSML\|\|[^>]*\/>/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+// Streaming think-tag stripper.
+// Handles partial tags split across chunk boundaries.
+class ThinkStripper {
+  constructor() {
+    this.buf    = '';
+    this.inside = false;
+  }
+
+  feed(chunk) {
+    this.buf += chunk;
+    let out = '';
+
+    while (this.buf.length > 0) {
+      if (this.inside) {
+        // Waiting for closing tag
+        const closeIdx = this.buf.toLowerCase().indexOf('</think');
+        if (closeIdx === -1) {
+          // Hold last 8 chars — enough for partial '</thinkin'
+          if (this.buf.length > 8) this.buf = this.buf.slice(-8);
+          break;
+        }
+        const gt = this.buf.indexOf('>', closeIdx);
+        if (gt === -1) { this.buf = this.buf.slice(closeIdx); break; }
+        this.inside = false;
+        this.buf = this.buf.slice(gt + 1);
+      } else {
+        // Looking for opening tag
+        const openIdx = this.buf.toLowerCase().indexOf('<think');
+        if (openIdx === -1) {
+          // Safe to emit all except last 6 chars ('<think' is 6 chars)
+          const safe = Math.max(0, this.buf.length - 6);
+          out += this.buf.slice(0, safe);
+          this.buf = this.buf.slice(safe);
+          break;
+        }
+        out += this.buf.slice(0, openIdx);
+        const rest = this.buf.slice(openIdx);
+        const gt   = rest.indexOf('>');
+        if (gt === -1) { this.buf = rest; break; }  // incomplete tag
+        this.inside = true;
+        this.buf = rest.slice(gt + 1);
+      }
+    }
+
+    return out;
+  }
+
+  // Call once after the stream ends to flush any held content.
+  flush() {
+    const out   = this.inside ? '' : this.buf;
+    this.buf    = '';
+    this.inside = false;
+    return out;
+  }
+}
+
+const SSE = {
+  enc:  (obj) => `data: ${JSON.stringify(obj)}\n\n`,
+  done: ()    => 'data: [DONE]\n\n',
+};
+
+// ── Main handler ──────────────────────────────────────────────────────
 export default async function handler(req) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
+  if (req.method === 'OPTIONS')
+    return new Response(null, { status: 204, headers: CORS });
 
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
-  }
+  if (req.method !== 'POST')
+    return jsonRes({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
 
-  const keyCheck = validateUserKey(req);
+  const keyCheck = validateKey(req);
   if (!keyCheck.ok) {
     const msg = keyCheck.reason === 'missing_key'
       ? 'No API key provided. Generate one at https://0vai.vercel.app/ApiKeys and pass it as Authorization: Bearer <key>.'
       : 'Invalid API key. Your key must start with void_sk_. Generate one at https://0vai.vercel.app/ApiKeys.';
-    return jsonResponse({
-      error: { message: msg, type: 'invalid_request_error', code: 'invalid_api_key' }
-    }, 401);
+    return jsonRes({ error: { message: msg, type: 'invalid_request_error', code: 'invalid_api_key' } }, 401);
   }
 
   let body;
   try { body = await req.json(); }
-  catch { return jsonResponse({ error: { message: 'Invalid JSON in request body', type: 'invalid_request_error', code: 'invalid_json' } }, 400); }
+  catch {
+    return jsonRes({ error: { message: 'Invalid JSON in request body', type: 'invalid_request_error', code: 'invalid_json' } }, 400);
+  }
 
-  const { messages, stream = false, model, temperature = 0.7, max_tokens = 2048, reasoning_effort, think } = body;
+  const {
+    messages        = [],
+    stream          = false,
+    temperature     = 0.7,
+    max_tokens      = 2048,
+    reasoning_effort,
+    think,
+    tools,
+    tool_choice,
+    response_format,
+  } = body;
 
-  const publicModelName = PUBLIC_MODEL_NAME;
+  const resolvedEffort = reasoning_effort ?? (think ? 'low' : 'medium');
+  const hasReasoning   = resolvedEffort !== false && resolvedEffort !== 0 && resolvedEffort !== 'none';
 
-  // Always enable reasoning - default to 'medium' if caller doesn't specify.
-  // External tools that don't send reasoning_effort still get reasoning.
-  const resolvedReasoningEffort = reasoning_effort ?? (think ? 'low' : 'medium');
-  const hasReasoning = resolvedReasoningEffort !== false && resolvedReasoningEffort !== 0 && resolvedReasoningEffort !== 'none';
+  // Our identity goes first, then everything from the caller unchanged.
+  // This is the key fix: external tools (OpenCode, Codex, Claude Code) send
+  // their own system messages with tool definitions — we must NOT strip them.
+  const upstreamMessages = [
+    { role: 'system', content: VOID_SYSTEM },
+    ...messages,
+  ];
 
-  const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
   const upstreamBody = {
-    model: UPSTREAM_MODEL,
-    // Identity prompt + caller's own system/developer message (tool
-    // definitions etc. from Claude Code / Codex / Cursor / OpenCode), merged.
-    messages: buildUpstreamMessages(messages),
+    model:      UPSTREAM_MODEL,
+    messages:   upstreamMessages,
     temperature,
     max_tokens: Math.max(2048, max_tokens),
     stream,
   };
 
-  // Do NOT forward tools/functions to upstream.
-  // The opencode zen endpoint does not execute tool calls — the model will
-  // reason about using them ("let me fetch...") but never actually call them,
-  // causing the response to stall. Strip all tool definitions so the model
-  // answers naturally instead of hanging on an unresolvable tool call.
-  // (The system-prompt fix above still lets it know what tools exist /
-  // how the calling client expects it to respond — it just can't trigger
-  // OpenAI-style function-calling through this upstream.)
+  // Forward tool definitions so the model can generate proper tool_call responses.
+  // Without this, the model tries to express tool usage in <Thinking> blocks
+  // which stalls the response (the bug you were seeing).
+  if (tools)           upstreamBody.tools           = tools;
+  if (tool_choice)     upstreamBody.tool_choice     = tool_choice;
+  if (response_format) upstreamBody.response_format = response_format;
 
   if (hasReasoning) {
-    const EFFORT_MAP = {
-      none:      'none',
-      low:       'low',
-      default:   'medium',
-      medium:    'medium',
-      high:      'high',
-      extrahigh: 'high',
-      max:       'max',
-    };
-    const effortStr = String(resolvedReasoningEffort).toLowerCase();
-    const upstreamEffort = EFFORT_MAP[effortStr] ?? 'medium';
-    upstreamBody.reasoning = { effort: upstreamEffort };
-    upstreamBody.reasoning_effort = upstreamEffort;
+    const MAP    = { none:'none', low:'low', default:'medium', medium:'medium', high:'high', extrahigh:'high', max:'max' };
+    const effort = MAP[String(resolvedEffort).toLowerCase()] ?? 'medium';
+    upstreamBody.reasoning        = { effort };
+    upstreamBody.reasoning_effort = effort;
   }
 
-  let upstreamRes;
-  let lastStatus = 503;
-
-  for (let attempt = 0; attempt < OPENCODE_API_KEYS.length; attempt++) {
+  // Key rotation with retry on transient errors
+  let upstream;
+  for (let i = 0; i < OPENCODE_API_KEYS.length; i++) {
     const key = getNextKey();
     try {
-      upstreamRes = await fetch('https://opencode.ai/zen/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(upstreamBody),
+      upstream = await fetch(UPSTREAM_URL, {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify(upstreamBody),
       });
-      if (upstreamRes.ok) break;
-      lastStatus = upstreamRes.status;
-      if (!ROTATE_STATUS.has(lastStatus)) break;
-    } catch (e) { lastStatus = 503; }
+      if (upstream.ok) break;
+      if (!ROTATE_STATUS.has(upstream.status)) break;
+    } catch { /* network error — try next key */ }
   }
 
-  if (!upstreamRes || !upstreamRes.ok) {
-    return jsonResponse({
-      error: {
-        message: 'The model is temporarily unavailable. Please try again in a moment.',
-        type: 'server_error',
-        code: 'service_unavailable',
-      }
+  if (!upstream?.ok)
+    return jsonRes({
+      error: { message: 'The model is temporarily unavailable. Please try again in a moment.', type: 'server_error', code: 'service_unavailable' },
     }, 503);
-  }
 
-  // ── Non-streaming ──
+  // ── Non-streaming ──────────────────────────────────────────────────
   if (!stream) {
-    const data = await upstreamRes.json();
+    const data   = await upstream.json();
     const choice = data?.choices?.[0];
-    let content = choice?.message?.content ?? '';
-    let reasoningContent = choice?.message?.reasoning_content ?? null;
+    const msg    = choice?.message ?? {};
 
-    content = content.replace(/<think[\s\S]*?<\/think\s*>/g, '').trim();
-    content = content.replace(/<thinking[\s\S]*?<\/thinking>/g, '').trim();
-    content = content.replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '').trim();
-    // Strip DeepSeek DSML tool call blocks that leak into content as raw text
-    content = content.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '').trim();
-    content = content.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '').trim();
-    content = content.replace(/<｜｜DSML｜｜[^>]*\/>/g, '').trim();
+    const content = stripThinkBlocks(msg.content ?? '');
+    const outMsg  = { role: 'assistant', content };
 
-    // If the model responded with a tool call and no content, it was trying
-    // to use a tool that will never execute. Return empty stop gracefully.
-    if (!content.trim() && choice?.finish_reason === 'tool_calls') content = '';
-    if (!content.trim()) content = 'How can I help you?';
+    // Pass through tool calls — OpenCode / Codex / Claude Code need these
+    if (msg.tool_calls) outMsg.tool_calls = msg.tool_calls;
+    // Pass through reasoning
+    if (hasReasoning && msg.reasoning_content) outMsg.reasoning_content = msg.reasoning_content;
 
-    const resBody = {
-      id: sanitizeId(data?.id),
-      object: 'chat.completion',
+    return new Response(JSON.stringify({
+      id:      sanitizeId(data?.id),
+      object:  'chat.completion',
       created: data?.created || Math.floor(Date.now() / 1000),
-      model: publicModelName,
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content },
-        finish_reason: choice?.finish_reason === 'tool_calls' ? 'stop' : (choice?.finish_reason || 'stop'),
-      }],
-      usage: data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
-
-    if (hasReasoning && reasoningContent && REASONING_MODE === 'passthrough') {
-      resBody.choices[0].message.reasoning_content = reasoningContent.trim();
-    }
-
-    return new Response(JSON.stringify(resBody), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-    });
+      model:   PUBLIC_MODEL,
+      choices: [{ index: 0, message: outMsg, finish_reason: choice?.finish_reason || 'stop' }],
+      usage:   data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
   }
 
-  // ══════════════════════════════════════════════════════════════════════
-  // STREAMING - reasoning streams FIRST (live), then content (live).
-  // Upstream (DeepSeek) naturally sends reasoning_content chunks before
-  // content chunks, so the correct order is preserved automatically.
-  // ══════════════════════════════════════════════════════════════════════
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  // ── Streaming ──────────────────────────────────────────────────────
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
 
   const readable = new ReadableStream({
-    async start(controller) {
-      const reader = upstreamRes.body.getReader();
-      let buffer = '';
+    async start(ctrl) {
+      const reader   = upstream.body.getReader();
+      let   buffer   = '';
+      let   id       = `chatcmpl-${Date.now()}`;
+      let   created  = Math.floor(Date.now() / 1000);
+      let   doneSent = false;
+      const stripper = new ThinkStripper();
 
-      // Strip <think> tags if model embeds them in the content field
-      const thinkParser = new ThinkTagParser();
-
-      // Buffer to accumulate full reasoning before flushing at the end
-      let reasoningBuffer = '';
-      let reasoningFlushed = false;
-
-      // Track stream ID/created from first chunk
-      let streamId = `chatcmpl-${Date.now()}`;
-      let streamCreated = Math.floor(Date.now() / 1000);
-
-      let doneSent = false;
-
-      const emit = (obj) => controller.enqueue(encoder.encode(SSE.encode(obj)));
-
-      const makeChunk = (delta, finishReason) => ({
-        id: streamId,
-        object: 'chat.completion.chunk',
-        created: streamCreated,
-        model: publicModelName,
-        choices: [{ index: 0, delta, finish_reason: finishReason || null }],
+      const emit  = (obj)      => ctrl.enqueue(enc.encode(SSE.enc(obj)));
+      const chunk = (delta, fr) => ({
+        id,
+        object:  'chat.completion.chunk',
+        created,
+        model:   PUBLIC_MODEL,
+        choices: [{ index: 0, delta, finish_reason: fr ?? null }],
       });
 
       try {
@@ -400,126 +287,69 @@ export default async function handler(req) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
+          buffer += dec.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(':')) continue;
-            if (!trimmed.startsWith('data:')) continue;
+            const t = line.trim();
+            if (!t || t.startsWith(':') || !t.startsWith('data:')) continue;
 
-            const raw = trimmed.slice(5).trim();
+            const raw = t.slice(5).trim();
             if (raw === '[DONE]') {
-              // Flush buffered reasoning before [DONE] so clients receive it
-              if (!reasoningFlushed && reasoningBuffer) {
-                if (reasoningBuffer.trim()) {
-                  emit(makeChunk({ reasoning_content: reasoningBuffer.trim() }, null));
-                }
-                reasoningFlushed = true;
-              }
-              controller.enqueue(encoder.encode(SSE.done()));
+              ctrl.enqueue(enc.encode(SSE.done()));
               doneSent = true;
               continue;
             }
 
-            let parsed;
-            try { parsed = JSON.parse(raw); } catch { continue; }
+            let p;
+            try { p = JSON.parse(raw); } catch { continue; }
 
-            // Capture stream metadata from first chunk
-            if (parsed.id) {
-              const sid = sanitizeId(parsed.id);
-              if (sid) streamId = sid;
-            }
-            if (parsed.created) streamCreated = parsed.created;
+            if (p.id)      { const s = sanitizeId(p.id); if (s) id = s; }
+            if (p.created) created = p.created;
 
-            const choice = parsed?.choices?.[0];
+            const choice = p?.choices?.[0];
             if (!choice) continue;
-
             const delta = choice.delta || {};
 
-            // ── Reasoning delta - emit LIVE chunk by chunk ──
-            if (hasReasoning && delta.reasoning_content != null && REASONING_MODE === 'passthrough') {
-              const r = delta.reasoning_content;
-              if (r) {
-                reasoningBuffer += r;
-                emit(makeChunk({ reasoning_content: r }, null));
-              }
+            // Reasoning — pass through directly
+            if (hasReasoning) {
+              if (delta.reasoning_content) emit(chunk({ reasoning_content: delta.reasoning_content }, null));
+              if (delta.thinking)          emit(chunk({ reasoning_content: delta.thinking },          null));
             }
 
-            // ── Thinking field (some providers use this instead of reasoning_content) ──
-            if (hasReasoning && delta.thinking != null && REASONING_MODE === 'passthrough') {
-              const t = delta.thinking;
-              if (t) {
-                reasoningBuffer += t;
-                emit(makeChunk({ reasoning_content: t }, null));
-              }
-            }
-
-            // ── Content delta - stream LIVE ──
+            // Content — strip think/thinking tags live
             if (delta.content != null) {
-              // Mark reasoning done once content starts (already streamed live above)
-              if (!reasoningFlushed) reasoningFlushed = true;
-
-              let c = delta.content;
-
-              // Strip any embedded <think> tags in content field
-              c = thinkParser.feed(c);
-              if (!c) continue;
-              // Strip DeepSeek DSML tool call markup leaking into content
-              c = c.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '');
-              c = c.replace(/<｜｜DSML｜｜[^>]*>[\s\S]*?<\/｜｜DSML｜｜[^>]*>/g, '');
-              c = c.replace(/<｜｜DSML｜｜[^>]*\/>/g, '');
-              if (!c.trim()) continue;
-
-              emit(makeChunk({ content: c }, null));
+              const c = stripper.feed(delta.content);
+              if (c) emit(chunk({ content: c }, null));
             }
 
-            // ── Tool call delta - model tried to use a tool we don't support ──
-            // Swallow tool_calls deltas entirely; the model will never get a
-            // tool result back so we just let it finish and the content (if any)
-            // was already streamed above. If finish_reason is 'tool_calls' it
-            // means the ENTIRE response was a tool invocation with no content —
-            // emit a plain stop so the client doesn't hang waiting for more.
-            if (delta.tool_calls != null) {
-              // intentionally ignored — tool execution not supported upstream
-              continue;
-            }
+            // Tool calls — pass through for OpenCode / Codex / Claude Code
+            if (delta.tool_calls) emit(chunk({ tool_calls: delta.tool_calls }, null));
 
-            // Finish reason chunk
-            if (choice.finish_reason) {
-              const fr = choice.finish_reason === 'tool_calls' ? 'stop' : choice.finish_reason;
-              emit(makeChunk({}, fr));
-            }
+            // Finish reason
+            if (choice.finish_reason) emit(chunk({}, choice.finish_reason));
           }
         }
-      } catch (e) {
-        // Stream read error - close cleanly
-      } finally {
-        // Flush any remaining reasoning buffer if content never came
-        if (!reasoningFlushed && reasoningBuffer) {
-          if (reasoningBuffer.trim()) {
-            emit(makeChunk({ reasoning_content: reasoningBuffer.trim() }, null));
-          }
-        }
-        if (!doneSent) controller.enqueue(encoder.encode(SSE.done()));
-        try { controller.close(); } catch (_) {}
+
+        // Flush any content held back by the think stripper
+        const rem = stripper.flush();
+        if (rem) emit(chunk({ content: rem }, null));
+
+      } catch { /* stream read error — close cleanly */ } finally {
+        if (!doneSent) ctrl.enqueue(enc.encode(SSE.done()));
+        try { ctrl.close(); } catch { /* ignore */ }
       }
     },
   });
 
   return new Response(readable, {
-    status: 200,
+    status:  200,
     headers: {
-      'Content-Type': 'text/event-stream',
+      'Content-Type':  'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      ...CORS_HEADERS,
+      'Connection':    'keep-alive',
+      ...CORS,
     },
   });
-}
-
-function sanitizeId(upstreamId) {
-  if (!upstreamId) return `chatcmpl-${Date.now()}`;
-  return `chatcmpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
