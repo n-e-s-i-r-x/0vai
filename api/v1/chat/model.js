@@ -11,9 +11,10 @@ const MODEL = {
   object:       'model',
   created:      1777939200,
   owned_by:     '0vai',
+  powered_by:   'Void',
   name:         'Void V1 Flash',
   display_name: 'Void V1 Flash',
-  description:  'Advanced MoE reasoning model by 0vai.',
+  description:  'Advanced MoE reasoning model created by 0vai, powered by Void.',
   icon_url:     'https://0vai.vercel.app/ico.webp',
   type:         'chat',
 
