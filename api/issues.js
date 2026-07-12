@@ -110,15 +110,32 @@ function sanitizeIssue(input){
     stepsToReproduce, expectedBehavior, actualBehavior,
     status: 'open',
     ownerResponse: '',
+    comments: [],
     creatorId,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
 }
 
+function genCommentId(){
+  return 'ic_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function sanitizeComment(input){
+  const author = input.author === 'owner' ? 'owner' : 'user';
+  const text = String(input.text || '').trim().slice(0, 4000);
+  return {
+    id: genCommentId(),
+    author,
+    text,
+    createdAt: Date.now()
+  };
+}
+
 function patchIssue(existing, patch){
   const allowed = ['status','ownerResponse','title','summary','description','reason','category','stepsToReproduce','expectedBehavior','actualBehavior'];
   const out = Object.assign({}, existing);
+  if(!Array.isArray(out.comments)) out.comments = [];
   for(const k of allowed){
     if(patch[k] !== undefined){
       if(k === 'status'){
@@ -127,6 +144,16 @@ function patchIssue(existing, patch){
       } else {
         out[k] = String(patch[k]).slice(0, 8000);
       }
+    }
+  }
+  // addComment: { author: 'owner'|'user', text: '...' }
+  if(patch.addComment && typeof patch.addComment === 'object'){
+    const text = String(patch.addComment.text || '').trim();
+    if(text){
+      const comment = sanitizeComment(patch.addComment);
+      out.comments = out.comments.concat([comment]);
+      // Keep legacy ownerResponse in sync so older clients still see the latest owner reply.
+      if(comment.author === 'owner') out.ownerResponse = comment.text;
     }
   }
   out.updatedAt = Date.now();
