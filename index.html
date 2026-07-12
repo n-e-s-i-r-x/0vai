@@ -1822,7 +1822,16 @@ body.themed .is-status-select{border-color:var(--accent-border);background-color
 .is-reply-textarea{width:100%;padding:10px 12px;background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;color:#fff;font-size:13px;font-family:var(--app-font);outline:none;resize:vertical;min-height:70px;line-height:1.5;transition:border-color .2s;}
 .is-reply-textarea:focus{border-color:#333;}
 body.themed .is-reply-textarea{border-color:var(--accent-border);background:var(--accent-subtle);}
-.is-reply-actions{display:flex;gap:6px;margin-top:6px;}
+.is-reply-actions{display:flex;gap:6px;margin-top:6px;align-items:center;}
+.is-ai-row{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.is-ai-select{padding:6px 10px;background:#111;border:1px solid #1f1f1f;border-radius:8px;color:#fff;font-size:12px;font-family:var(--app-font);outline:none;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,#888 50%),linear-gradient(135deg,#888 50%,transparent 50%);background-position:calc(100% - 10px) 50%,calc(100% - 6px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat;padding-right:22px;}
+body.themed .is-ai-select{border-color:var(--accent-border);background-color:var(--accent-subtle);}
+.is-ai-btn{width:30px;height:30px;flex:none;display:flex;align-items:center;justify-content:center;background:#111;border:1px solid #1f1f1f;border-radius:8px;color:#fff;cursor:pointer;transition:border-color .2s,opacity .2s;padding:0;}
+.is-ai-btn:hover{border-color:#333;}
+.is-ai-btn:disabled{opacity:.5;cursor:default;}
+body.themed .is-ai-btn{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-ai-spin{animation:isAiSpin .8s linear infinite;}
+@keyframes isAiSpin{to{transform:rotate(360deg);}}
 .is-empty-row{padding:40px 16px;text-align:center;color:rgba(255,255,255,.35);font-size:13px;animation:isScreenIn .35s ease both;}
 
 /* Toast re-use for issues */
@@ -6444,6 +6453,14 @@ function ownerIconImg(n){
           '<div class="is-reply-actions">'+
             '<button class="is-btn" onclick="saveReply(\''+esc(i.id)+'\')">Save Reply</button>'+
             '<button class="is-btn" onclick="toggleReply(\''+esc(i.id)+'\')">Cancel</button>'+
+            '<div class="is-ai-row">'+
+              '<select class="is-ai-select" id="is-ai-status-'+esc(i.id)+'">'+
+                IS_STATUSES.map(s=>'<option value="'+s+'"'+((i.status||'open')===s?' selected':'')+'>'+s.charAt(0).toUpperCase()+s.slice(1)+'</option>').join('')+
+              '</select>'+
+              '<button class="is-ai-btn" id="is-ai-btn-'+esc(i.id)+'" onclick="aiDraftReply(\''+esc(i.id)+'\')" title="AI draft reply">'+
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z"/><path d="M19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z"/></svg>'+
+              '</button>'+
+            '</div>'+
           '</div>'+
         '</div>'+
       '</div>';
@@ -6479,6 +6496,47 @@ function ownerIconImg(n){
     if(card){ card.style.opacity = ''; card.style.pointerEvents = ''; }
     isToast('Reply saved');
     renderOwnerList();
+  };
+
+  window.aiDraftReply = async function(id){
+    const btn = document.getElementById('is-ai-btn-'+id);
+    const statusSel = document.getElementById('is-ai-status-'+id);
+    const ta = document.getElementById('is-reply-txt-'+id);
+    if(!btn || !ta) return;
+    const issue = _issues.find(i=>i.id===id);
+    if(!issue){ isToast('Issue not found'); return; }
+    const status = statusSel ? statusSel.value : (issue.status||'open');
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="is-ai-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" opacity=".25"/><path d="M21 12a9 9 0 0 0-9-9"/></svg>';
+
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(()=>ctrl.abort(), 27000);
+    try{
+      const res = await fetch('/api/reply', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ issue: issue, status: status }),
+        signal: ctrl.signal
+      });
+      clearTimeout(timeoutId);
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data || !data.reply){
+        isToast((data && data.error) ? data.error : 'AI reply failed');
+        return;
+      }
+      ta.value = data.reply;
+      ta.style.transition = 'opacity .2s';
+      ta.style.opacity = '.3';
+      requestAnimationFrame(()=>{ ta.style.opacity = '1'; });
+    }catch(e){
+      clearTimeout(timeoutId);
+      isToast(e && e.name === 'AbortError' ? 'AI reply timed out' : 'AI reply failed');
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   };
 
   window.updateIssueStatus = async function(id, status){
