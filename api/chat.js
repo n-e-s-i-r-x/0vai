@@ -10,7 +10,7 @@ export const config = { runtime: 'edge' };
 
 const MODEL_MAP = {
   '0':         { id: 'deepseek-v4-flash-free',         hasReasoning:false, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  '00':        { id: 'liquid/lfm-2.5-1.2b-thinking:free',  hasReasoning:true,  hasPromptedThink:false, minTokens:10000 },
+  '00':        { id: 'openrouter/free',  hasReasoning:true,  hasPromptedThink:false, minTokens:10000 },
   '000':       { id: 'nemotron-3-super-free',           hasReasoning:true,  hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   'V':         { id: 'deepseek-v4-flash-free',        hasReasoning:true, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
   'VV':        { id: 'deepseek-v4-flash-free', hasReasoning:true,  hasPromptedThink:false, minTokens:10000, contextWindow:100000, useOpenCode:true },
