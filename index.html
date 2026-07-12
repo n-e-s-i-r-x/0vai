@@ -904,6 +904,9 @@ body.themed .speed-timer {
   <div class="sb-lbl">Conversations</div>
   <div class="chat-list" id="chat-list"></div>
   <div class="sb-foot">
+    <button class="sb-fbtn sb-issues" onclick="openIssues()">
+      Issues
+    </button>
     <button class="sb-fbtn" onclick="openApiKey()">
       <svg width="18" height="18" viewBox="0 0 7 11" fill="currentColor" shape-rendering="crispEdges">
         <rect x="1" y="0" width="5" height="1"/>
@@ -1072,7 +1075,7 @@ body.themed .speed-timer {
   </div>
 </div>
 
-<!-- ── OWNER PAGE OVERLAY ── -->
+<!-- ── OWNER PAGE OVERLAY (now: Issue Management) ── -->
 <div id="owner-ov" class="owner-ov">
   <button class="owner-back" onclick="closeOwnerPage()" title="Back">
     <svg width="24" height="24" viewBox="0 0 12 12" fill="currentColor" shape-rendering="crispEdges">
@@ -1081,12 +1084,35 @@ body.themed .speed-timer {
       <rect x="1" y="6" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/>
     </svg>
   </button>
-  <div class="owner-content">
-    <div class="owner-top">
-      <div class="owner-balance"><span class="owner-balance-cur">$</span>1073<span style="font-size:60px">.</span><span style="font-size:60px">02</span></div>
-      <button class="owner-withdraw" onclick="ownerWithdraw()">Withdraw</button>
+  <div class="owner-content" style="max-width:560px;padding:80px 20px 60px;">
+    <div class="is-title" style="margin-bottom:6px;">Issue Management</div>
+    <div class="is-subtitle" style="margin-bottom:18px;">Review, reply, and resolve every submitted issue.</div>
+    <input id="is-owner-search" class="is-owner-search" type="text" placeholder="Search issues..." oninput="filterOwnerIssues(this.value)"/>
+    <div class="is-owner-filter" id="is-owner-filter">
+      <button class="is-filter-btn active" data-status="all" onclick="setOwnerFilter('all')">All</button>
+      <button class="is-filter-btn" data-status="open" onclick="setOwnerFilter('open')">Open</button>
+      <button class="is-filter-btn" data-status="fixed" onclick="setOwnerFilter('fixed')">Fixed</button>
+      <button class="is-filter-btn" data-status="closed" onclick="setOwnerFilter('closed')">Closed</button>
     </div>
-    <div class="owner-logs"><div class="owner-logs-title">Payouts</div><div id="owner-logs"></div></div>
+    <div id="is-owner-list" style="width:100%;"></div>
+  </div>
+</div>
+
+<!-- ── ISSUES OVERLAY ── -->
+<div id="issues-ov" class="is-ov">
+  <button class="is-back" onclick="closeIssues()" title="Back">‹</button>
+  <div class="is-scroll" id="is-scroll"></div>
+  <button class="is-fab" id="is-fab" onclick="openIssueModal()" title="New issue" style="display:none;">+</button>
+</div>
+
+<!-- ── ISSUE SUBMIT MODAL ── -->
+<div id="is-modal-ov" class="is-modal-ov" onclick="if(event.target===this)closeIssueModal()">
+  <div class="is-modal" id="is-modal">
+    <div class="is-modal-head">
+      <div class="is-modal-title">Submit Issue</div>
+      <button class="is-modal-x" onclick="closeIssueModal()" title="Close">✕</button>
+    </div>
+    <div class="is-modal-body" id="is-modal-body"></div>
   </div>
 </div>
 
@@ -1629,6 +1655,174 @@ print(r.json())</pre>
 .bench-stat-val{font-size:16px;font-weight:800;color:#fff;font-family:var(--app-font);letter-spacing:.2px;}
 .bench-stat-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:rgba(255,255,255,.35);margin-top:3px;font-family:var(--app-font);}
 .bench-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);margin:16px 0;}
+
+/* ── ISSUES SYSTEM ── */
+.is-ov{position:fixed;top:0;left:0;z-index:50000;display:none;flex-direction:column;background:#000;opacity:0;transition:opacity .8s cubic-bezier(.4,0,.2,1);width:100%;height:var(--app-height,100%);font-family:var(--app-font);overflow:hidden;}
+.is-ov.show{display:flex;}
+.is-ov.visible{opacity:1;}
+body.themed .is-ov{background:#000;}
+.is-back{position:absolute;top:calc(18px + env(safe-area-inset-top));left:18px;z-index:50001;background:none;border:none;cursor:pointer;padding:8px;opacity:.5;transition:opacity .2s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:300;line-height:1;}
+.is-back:hover{opacity:1!important;}
+.is-scroll{flex:1;overflow-y:auto;padding:80px 20px 40px;width:100%;max-width:480px;margin:0 auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.is-scroll::-webkit-scrollbar{width:0;height:0;display:none;}
+.is-screen{animation:isScreenIn .35s cubic-bezier(.4,0,.2,1) both;}
+@keyframes isScreenIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.is-screen.leaving{animation:isScreenOut .25s cubic-bezier(.4,0,.2,1) both;}
+@keyframes isScreenOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
+.is-title{font-size:32px;font-weight:800;color:#fff;line-height:1.1;letter-spacing:-.5px;margin-bottom:6px;}
+.is-subtitle{font-size:13px;color:rgba(255,255,255,.4);line-height:1.5;margin-bottom:24px;}
+.is-cards{display:flex;flex-direction:column;gap:12px;}
+.is-cat-card{display:block;width:100%;text-align:left;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:14px;padding:18px 18px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),border-color .2s,background .2s;animation:isCardIn .4s cubic-bezier(.4,0,.2,1) both;font-family:var(--app-font);}
+.is-cat-card:nth-child(2){animation-delay:.06s;}
+@keyframes isCardIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.is-cat-card:active{transform:scale(.97);background:#111;}
+.is-cat-card:hover{border-color:#2a2a2a;}
+body.themed .is-cat-card{border-color:var(--accent-border);background:var(--accent-subtle);}
+body.themed .is-cat-card:hover{border-color:var(--accent);}
+.is-cat-name{font-size:18px;font-weight:700;color:#fff;letter-spacing:-.2px;}
+.is-cat-desc{font-size:12.5px;color:rgba(255,255,255,.4);margin-top:6px;line-height:1.5;}
+.is-cat-count{font-size:11px;color:rgba(255,255,255,.3);margin-top:10px;letter-spacing:.4px;text-transform:uppercase;font-weight:700;}
+
+.is-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;gap:10px;animation:isScreenIn .4s ease both;}
+.is-empty-txt{font-size:14px;color:rgba(255,255,255,.4);text-align:center;}
+
+.is-list{display:flex;flex-direction:column;gap:10px;padding-bottom:80px;}
+.is-card{display:block;width:100%;text-align:left;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:12px;padding:14px 16px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),border-color .2s,background .2s;animation:isCardIn .35s cubic-bezier(.4,0,.2,1) both;font-family:var(--app-font);}
+.is-card:active{transform:scale(.98);}
+.is-card:hover{border-color:#2a2a2a;}
+body.themed .is-card{border-color:var(--accent-border);background:var(--accent-subtle);}
+body.themed .is-card:hover{border-color:var(--accent);}
+.is-card.removing{animation:isCardRemove .35s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none;}
+@keyframes isCardRemove{to{opacity:0;transform:translateX(40px) scale(.9);max-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;border-width:0;}}
+.is-card-title{font-size:15px;font-weight:700;color:#fff;line-height:1.3;margin-bottom:4px;letter-spacing:-.1px;word-wrap:break-word;overflow-wrap:break-word;}
+.is-card-summary{font-size:12.5px;color:rgba(255,255,255,.5);line-height:1.45;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.is-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.is-card-cat{font-size:10.5px;font-weight:700;color:rgba(255,255,255,.55);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);padding:3px 8px;border-radius:5px;letter-spacing:.3px;}
+body.themed .is-card-cat{color:var(--accent);border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-card-date{font-size:11px;color:rgba(255,255,255,.3);margin-left:auto;}
+.is-badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;letter-spacing:.5px;text-transform:uppercase;border:1px solid transparent;}
+.is-badge.open{color:#fbbf24;background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);}
+.is-badge.fixed{color:#4ade80;background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.3);}
+.is-badge.closed{color:rgba(255,255,255,.5);background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.15);}
+.is-badge.changing{animation:isBadgePulse .5s ease;}
+@keyframes isBadgePulse{0%{transform:scale(1)}50%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+/* Floating + button */
+.is-fab{position:absolute;right:20px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:50002;width:54px;height:54px;border-radius:50%;background:#fff;color:#000;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:300;line-height:1;font-family:var(--app-font);box-shadow:0 6px 24px rgba(0,0,0,.4),0 0 0 0 rgba(255,255,255,.3);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .3s;animation:isFabIn .4s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes isFabIn{from{opacity:0;transform:scale(.5) rotate(-90deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+.is-fab:active{transform:scale(.88) rotate(90deg);}
+body.themed .is-fab{background:var(--accent);color:#000;}
+
+/* Submit modal */
+.is-modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50003;display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .3s ease;padding:0;pointer-events:none;}
+.is-modal-ov.show{display:flex;pointer-events:auto;}
+.is-modal-ov.visible{opacity:1;}
+.is-modal{background:#0a0a0a;border:1px solid #1a1a1a;border-radius:18px 18px 0 0;width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .4s cubic-bezier(.34,1.4,.64,1);padding:0;overflow:hidden;}
+.is-modal.open{transform:translateY(0);}
+body.themed .is-modal{border-color:var(--accent-border);background:#0a0a0a;}
+.is-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 12px;flex-shrink:0;}
+.is-modal-title{font-size:18px;font-weight:700;color:#fff;letter-spacing:-.2px;}
+.is-modal-x{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.4);font-size:22px;font-weight:300;line-height:1;padding:6px;transition:color .15s,transform .1s;font-family:var(--app-font);}
+.is-modal-x:hover{color:#fff;}
+.is-modal-x:active{transform:scale(.85);}
+.is-modal-body{overflow-y:auto;padding:0 18px 18px;flex:1;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.is-modal-body::-webkit-scrollbar{width:0;height:0;display:none;}
+.is-field{margin-bottom:14px;animation:isFieldIn .35s cubic-bezier(.4,0,.2,1) both;}
+.is-field:nth-child(1){animation-delay:.04s;}
+.is-field:nth-child(2){animation-delay:.08s;}
+.is-field:nth-child(3){animation-delay:.12s;}
+.is-field:nth-child(4){animation-delay:.16s;}
+.is-field:nth-child(5){animation-delay:.20s;}
+.is-field:nth-child(6){animation-delay:.24s;}
+.is-field:nth-child(7){animation-delay:.28s;}
+.is-field:nth-child(8){animation-delay:.32s;}
+@keyframes isFieldIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.is-lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px;}
+.is-lbl .is-req{color:#ef4444;margin-left:3px;}
+.is-input,.is-textarea,.is-select{width:100%;padding:11px 13px;background:#111;border:1px solid #1f1f1f;border-radius:10px;color:#fff;font-size:14px;font-family:var(--app-font);outline:none;transition:border-color .2s,background .2s;-webkit-appearance:none;appearance:none;}
+.is-input::placeholder,.is-textarea::placeholder{color:#444;}
+.is-input:focus,.is-textarea:focus,.is-select:focus{border-color:#333;background:#141414;}
+body.themed .is-input,body.themed .is-textarea,body.themed .is-select{border-color:var(--accent-border);background:var(--accent-subtle);}
+body.themed .is-input:focus,body.themed .is-textarea:focus,body.themed .is-select:focus{border-color:var(--accent);}
+.is-textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.is-select{background-image:linear-gradient(45deg,transparent 50%,#888 50%),linear-gradient(135deg,#888 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:30px;}
+.is-field-err{font-size:11px;color:#ef4444;margin-top:5px;display:none;animation:isScreenIn .2s ease;}
+.is-field.err .is-input,.is-field.err .is-textarea,.is-field.err .is-select{border-color:#ef4444;}
+.is-field.err .is-field-err{display:block;}
+.is-submit{width:100%;padding:13px;background:#fff;color:#000;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px;cursor:pointer;transition:transform .1s,opacity .2s;font-family:var(--app-font);margin-top:4px;}
+.is-submit:active{transform:scale(.97);}
+.is-submit:disabled{opacity:.5;pointer-events:none;}
+body.themed .is-submit{background:var(--accent);color:#000;}
+.is-submit .is-spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:isSpin .7s linear infinite;vertical-align:-2px;margin-right:8px;}
+body.themed .is-submit .is-spin{border-color:rgba(0,0,0,.3);border-top-color:#000;}
+@keyframes isSpin{to{transform:rotate(360deg)}}
+
+/* Detail */
+.is-detail{display:flex;flex-direction:column;gap:14px;padding-bottom:40px;animation:isScreenIn .35s ease both;}
+.is-detail-title{font-size:22px;font-weight:800;color:#fff;line-height:1.25;letter-spacing:-.3px;}
+.is-detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.is-detail-meta .is-card-cat{font-size:11px;}
+.is-detail-meta .is-card-date{font-size:11.5px;margin:0;}
+.is-detail-sec{background:#0a0a0a;border:1px solid #1a1a1a;border-radius:12px;padding:14px 16px;animation:isCardIn .35s cubic-bezier(.4,0,.2,1) both;}
+.is-detail-sec:nth-child(2){animation-delay:.04s;}
+.is-detail-sec:nth-child(3){animation-delay:.08s;}
+.is-detail-sec:nth-child(4){animation-delay:.12s;}
+.is-detail-sec:nth-child(5){animation-delay:.16s;}
+.is-detail-sec:nth-child(6){animation-delay:.20s;}
+.is-detail-sec:nth-child(7){animation-delay:.24s;}
+body.themed .is-detail-sec{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-detail-lbl{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px;}
+.is-detail-val{font-size:14px;color:#ddd;line-height:1.55;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;}
+.is-detail-owner{background:rgba(74,222,128,.04);border:1px solid rgba(74,222,128,.15);border-radius:12px;padding:14px 16px;animation:isCardIn .35s cubic-bezier(.4,0,.2,1) both;}
+body.themed .is-detail-owner{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-detail-owner .is-detail-lbl{color:#4ade80;}
+body.themed .is-detail-owner .is-detail-lbl{color:var(--accent);}
+.is-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+.is-btn{padding:10px 16px;background:#141414;border:1px solid #222;border-radius:10px;color:#ddd;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,transform .1s,border-color .15s;font-family:var(--app-font);}
+.is-btn:active{transform:scale(.96);}
+.is-btn:disabled{opacity:.4;pointer-events:none;}
+.is-btn.danger{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06);}
+.is-btn.danger:active{background:rgba(239,68,68,.12);}
+body.themed .is-btn{border-color:var(--accent-border);background:var(--accent-subtle);color:var(--accent);}
+body.themed .is-btn.danger{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06);}
+
+/* Owner issue management */
+.is-owner-search{width:100%;padding:11px 13px;background:#111;border:1px solid #1f1f1f;border-radius:10px;color:#fff;font-size:14px;font-family:var(--app-font);outline:none;transition:border-color .2s;margin-bottom:12px;}
+.is-owner-search::placeholder{color:#444;}
+.is-owner-search:focus{border-color:#333;}
+body.themed .is-owner-search{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-owner-filter{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.is-filter-btn{padding:7px 13px;background:#111;border:1px solid #1f1f1f;border-radius:999px;color:rgba(255,255,255,.55);font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s;font-family:var(--app-font);letter-spacing:.3px;}
+.is-filter-btn:active{transform:scale(.95);}
+.is-filter-btn.active{background:#fff;color:#000;border-color:#fff;}
+body.themed .is-filter-btn{border-color:var(--accent-border);background:var(--accent-subtle);color:var(--accent);}
+body.themed .is-filter-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.is-owner-card{background:#0a0a0a;border:1px solid #1a1a1a;border-radius:12px;padding:14px 16px;margin-bottom:10px;animation:isCardIn .35s cubic-bezier(.4,0,.2,1) both;}
+body.themed .is-owner-card{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-owner-card.removing{animation:isCardRemove .35s cubic-bezier(.4,0,.2,1) forwards;}
+.is-owner-card-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;line-height:1.3;}
+.is-owner-card-summary{font-size:12.5px;color:rgba(255,255,255,.5);line-height:1.45;margin-bottom:10px;}
+.is-owner-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.is-owner-card-meta .is-card-cat{font-size:10.5px;}
+.is-owner-card-meta .is-card-date{font-size:11px;margin:0;}
+.is-owner-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:10px;border-top:1px solid #1a1a1a;}
+body.themed .is-owner-actions{border-top-color:var(--accent-border);}
+.is-owner-actions .is-btn{padding:7px 12px;font-size:12px;}
+.is-status-select{padding:7px 12px;background:#111;border:1px solid #1f1f1f;border-radius:8px;color:#fff;font-size:12px;font-family:var(--app-font);outline:none;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,#888 50%),linear-gradient(135deg,#888 50%,transparent 50%);background-position:calc(100% - 12px) 50%,calc(100% - 8px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat;padding-right:26px;}
+body.themed .is-status-select{border-color:var(--accent-border);background-color:var(--accent-subtle);}
+.is-reply-wrap{margin-top:10px;}
+.is-reply-textarea{width:100%;padding:10px 12px;background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;color:#fff;font-size:13px;font-family:var(--app-font);outline:none;resize:vertical;min-height:70px;line-height:1.5;transition:border-color .2s;}
+.is-reply-textarea:focus{border-color:#333;}
+body.themed .is-reply-textarea{border-color:var(--accent-border);background:var(--accent-subtle);}
+.is-reply-actions{display:flex;gap:6px;margin-top:6px;}
+.is-empty-row{padding:40px 16px;text-align:center;color:rgba(255,255,255,.35);font-size:13px;animation:isScreenIn .35s ease both;}
+
+/* Toast re-use for issues */
+.is-toast{position:fixed;bottom:calc(30px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);z-index:99999;background:rgba(255,255,255,.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:10px 20px;border-radius:10px;font-size:12px;color:#fff;font-family:var(--app-font);opacity:0;transition:opacity .35s ease,transform .35s ease;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center;}
+.is-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Sidebar Issues button (no icon) */
+.sb-fbtn.sb-issues{padding-left:16px;}
 </style>
 
 <script>
@@ -5553,14 +5747,739 @@ function ownerIconImg(n){
   return '<img src="'+urls[n]+'" alt="" style="width:22px;height:22px;border-radius:4px;object-fit:contain" loading="lazy" onerror="this.style.display=\'none\'"/>';
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   ISSUES SYSTEM — self-contained module
+   - Persists to /api/issues (serverless) with localStorage cache + fallback
+   - All animations use existing cubic-bezier easing & fade patterns
+   - No icons used anywhere in this feature (text-only back/close buttons)
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  const IS_CATEGORIES = [
+    { key:'web',   name:'Web Problems',   desc:'UI glitches, layout breaks, broken links, browser issues.' },
+    { key:'model', name:'Model Problems', desc:'Wrong answers, hallucinations, slow responses, model errors.' }
+  ];
+  const IS_STATUSES = ['open','fixed','closed'];
+  const IS_API = '/api/issues';
+  const IS_CACHE_KEY = 'void_issues_cache_v1';
+  const IS_CREATOR_KEY = 'void_creator_id_v1';
+  const IS_LAST_SEEN_KEY = 'void_issues_last_seen_v1';
+
+  // ---- State ----
+  let _issues = [];          // in-memory cache (newest first)
+  let _currentScreen = null; // 'home' | 'list' | 'detail'
+  let _currentCategory = null;
+  let _currentIssueId = null;
+  let _ownerFilter = 'all';
+  let _ownerSearch = '';
+  let _loading = false;
+  let _pollTimer = null;
+  let _submitting = false;
+
+  // ---- Helpers ----
+  function getCreatorId(){
+    try{
+      let id = localStorage.getItem(IS_CREATOR_KEY);
+      if(!id){
+        id = 'u_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+        localStorage.setItem(IS_CREATOR_KEY, id);
+      }
+      return id;
+    }catch(e){ return null; }
+  }
+
+  function cacheRead(){
+    try{
+      const raw = localStorage.getItem(IS_CACHE_KEY);
+      if(!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function cacheWrite(arr){
+    try{ localStorage.setItem(IS_CACHE_KEY, JSON.stringify(arr)); }catch(e){}
+  }
+
+  function isToast(msg){
+    let t = document.getElementById('is-toast');
+    if(!t){
+      t = document.createElement('div');
+      t.id = 'is-toast';
+      t.className = 'is-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    requestAnimationFrame(()=>t.classList.add('show'));
+    if(window._isToastTimer) clearTimeout(window._isToastTimer);
+    window._isToastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+
+  function fmtDate(ts){
+    if(!ts) return '';
+    const d = new Date(ts);
+    if(isNaN(d.getTime())) return '';
+    const now = new Date();
+    const diff = now - d;
+    const mins = Math.floor(diff/60000);
+    if(mins < 1) return 'Just now';
+    if(mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins/60);
+    if(hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs/24);
+    if(days < 7) return days + 'd ago';
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  }
+  function fmtFullDate(ts){
+    if(!ts) return '';
+    const d = new Date(ts);
+    if(isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  }
+  function esc(s){return String(s??'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+  function catName(key){
+    const c = IS_CATEGORIES.find(c=>c.key===key);
+    return c ? c.name : key;
+  }
+  function badgeHtml(status){
+    return '<span class="is-badge '+esc(status)+'">'+esc(status)+'</span>';
+  }
+
+  // ---- API ----
+  async function apiFetch(){
+    _loading = true;
+    try{
+      const ctrl = new AbortController();
+      const id = setTimeout(()=>ctrl.abort(), 6000);
+      const res = await fetch(IS_API, { method:'GET', signal:ctrl.signal, headers:{'Accept':'application/json'} });
+      clearTimeout(id);
+      if(!res.ok) throw new Error('bad status');
+      const data = await res.json();
+      const arr = Array.isArray(data.issues) ? data.issues : [];
+      arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+      _issues = arr;
+      cacheWrite(arr);
+      try{ localStorage.setItem(IS_LAST_SEEN_KEY, String(Date.now())); }catch(e){}
+      return arr;
+    }catch(e){
+      _issues = cacheRead();
+      return _issues;
+    }finally{
+      _loading = false;
+    }
+  }
+
+  async function apiCreate(payload){
+    const ctrl = new AbortController();
+    const id = setTimeout(()=>ctrl.abort(), 8000);
+    try{
+      const res = await fetch(IS_API, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+      clearTimeout(id);
+      if(!res.ok){
+        let msg = 'Failed to submit';
+        try{ const j = await res.json(); if(j && j.error) msg = j.error; }catch(_){}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      const issue = data.issue;
+      if(issue){
+        const existing = _issues.findIndex(i=>i.id===issue.id);
+        if(existing >= 0) _issues[existing] = issue;
+        else _issues.unshift(issue);
+        _issues.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+        cacheWrite(_issues);
+      }
+      return issue;
+    }catch(e){
+      clearTimeout(id);
+      const local = makeLocalIssue(payload);
+      const existing = _issues.findIndex(i=>i.id===local.id);
+      if(existing >= 0) _issues[existing] = local;
+      else _issues.unshift(local);
+      cacheWrite(_issues);
+      return local;
+    }
+  }
+
+  async function apiUpdate(id, patch){
+    const ctrl = new AbortController();
+    const id2 = setTimeout(()=>ctrl.abort(), 6000);
+    try{
+      const res = await fetch(IS_API, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({ id, patch }),
+        signal: ctrl.signal
+      });
+      clearTimeout(id2);
+      if(!res.ok) throw new Error('update failed');
+      const data = await res.json();
+      const updated = data.issue;
+      if(updated){
+        const idx = _issues.findIndex(i=>i.id===updated.id);
+        if(idx >= 0) _issues[idx] = updated;
+        cacheWrite(_issues);
+      }
+      return updated;
+    }catch(e){
+      clearTimeout(id2);
+      const idx = _issues.findIndex(i=>i.id===id);
+      if(idx >= 0){
+        _issues[idx] = Object.assign({}, _issues[idx], patch);
+        cacheWrite(_issues);
+        return _issues[idx];
+      }
+      return null;
+    }
+  }
+
+  async function apiDelete(id){
+    const ctrl = new AbortController();
+    const id2 = setTimeout(()=>ctrl.abort(), 6000);
+    try{
+      const res = await fetch(IS_API + '?id=' + encodeURIComponent(id), {
+        method:'DELETE',
+        signal: ctrl.signal
+      });
+      clearTimeout(id2);
+      if(!res.ok) throw new Error('delete failed');
+    }catch(e){
+      clearTimeout(id2);
+    }
+    _issues = _issues.filter(i=>i.id!==id);
+    cacheWrite(_issues);
+  }
+
+  function makeLocalIssue(payload){
+    return {
+      id: 'local_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      title: payload.title,
+      summary: payload.summary,
+      description: payload.description,
+      reason: payload.reason,
+      category: payload.category,
+      stepsToReproduce: payload.stepsToReproduce || '',
+      expectedBehavior: payload.expectedBehavior || '',
+      actualBehavior: payload.actualBehavior || '',
+      status: 'open',
+      ownerResponse: '',
+      creatorId: payload.creatorId || null,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  }
+
+  // ---- Overlay open/close (matches existing 0.8s opacity transition) ----
+  function openIssues(){
+    if(typeof closeSidebar === 'function') closeSidebar();
+    const ov = document.getElementById('issues-ov');
+    if(!ov) return;
+    ov.classList.add('show');
+    requestAnimationFrame(()=>ov.classList.add('visible'));
+    showScreen('home');
+    apiFetch().then(()=>{ refreshCurrentScreen(); });
+    startPolling();
+  }
+  function closeIssues(){
+    const ov = document.getElementById('issues-ov');
+    if(!ov) return;
+    ov.classList.remove('visible');
+    closeIssueModal(true);
+    setTimeout(()=>{
+      ov.classList.remove('show');
+      _currentScreen = null;
+      _currentCategory = null;
+      _currentIssueId = null;
+      const scroll = document.getElementById('is-scroll');
+      if(scroll) scroll.scrollTop = 0;
+    }, 800);
+    stopPolling();
+  }
+
+  // ---- Screen rendering ----
+  function showScreen(name, opts){
+    opts = opts || {};
+    const scroll = document.getElementById('is-scroll');
+    if(!scroll) return;
+    const prev = scroll.querySelector('.is-screen');
+    const render = ()=>{
+      _currentScreen = name;
+      if(name === 'home') scroll.innerHTML = renderHome();
+      else if(name === 'list') scroll.innerHTML = renderList();
+      else if(name === 'detail') scroll.innerHTML = renderDetail();
+      scroll.scrollTop = 0;
+      const fab = document.getElementById('is-fab');
+      if(fab) fab.style.display = (name === 'list') ? 'flex' : 'none';
+    };
+    if(prev){
+      prev.classList.add('leaving');
+      setTimeout(render, 220);
+    }else{
+      render();
+    }
+  }
+
+  function refreshCurrentScreen(){
+    const scroll = document.getElementById('is-scroll');
+    if(!scroll) return;
+    if(!_currentScreen){ showScreen('home'); return; }
+    if(_currentScreen === 'home') scroll.innerHTML = renderHome();
+    else if(_currentScreen === 'list') scroll.innerHTML = renderList();
+    else if(_currentScreen === 'detail') scroll.innerHTML = renderDetail();
+    const fab = document.getElementById('is-fab');
+    if(fab) fab.style.display = (_currentScreen === 'list') ? 'flex' : 'none';
+  }
+
+  function renderHome(){
+    const counts = {};
+    IS_CATEGORIES.forEach(c=>counts[c.key] = _issues.filter(i=>i.category===c.key).length);
+    const cards = IS_CATEGORIES.map(c=>{
+      return '<button class="is-cat-card" onclick="openIssueList(\''+c.key+'\')">'+
+        '<div class="is-cat-name">'+esc(c.name)+'</div>'+
+        '<div class="is-cat-desc">'+esc(c.desc)+'</div>'+
+        '<div class="is-cat-count">'+counts[c.key]+' issue'+(counts[c.key]===1?'':'s')+'</div>'+
+      '</button>';
+    }).join('');
+    return '<div class="is-screen">'+
+      '<div class="is-title">Issues</div>'+
+      '<div class="is-subtitle">Report problems and track resolutions. Choose a category to view or submit an issue.</div>'+
+      '<div class="is-cards">'+cards+'</div>'+
+    '</div>';
+  }
+
+  function renderList(){
+    const list = _issues.filter(i=>i.category===_currentCategory);
+    if(!list.length){
+      return '<div class="is-screen">'+
+        '<div class="is-title">'+esc(catName(_currentCategory))+'</div>'+
+        '<div class="is-subtitle">No issues submitted yet.</div>'+
+        '<div class="is-empty"><div class="is-empty-txt">No issues submitted yet.<br>Tap + to add the first one.</div></div>'+
+      '</div>';
+    }
+    const cards = list.map(i=>{
+      return '<button class="is-card" onclick="openIssueDetail(\''+esc(i.id)+'\')">'+
+        '<div class="is-card-title">'+esc(i.title)+'</div>'+
+        '<div class="is-card-summary">'+esc(i.summary||'')+'</div>'+
+        '<div class="is-card-meta">'+
+          '<span class="is-card-cat">'+esc(catName(i.category))+'</span>'+
+          badgeHtml(i.status||'open')+
+          '<span class="is-card-date">'+esc(fmtDate(i.createdAt))+'</span>'+
+        '</div>'+
+      '</button>';
+    }).join('');
+    return '<div class="is-screen">'+
+      '<div class="is-title">'+esc(catName(_currentCategory))+'</div>'+
+      '<div class="is-subtitle">'+list.length+' issue'+(list.length===1?'':'s')+' reported.</div>'+
+      '<div class="is-list">'+cards+'</div>'+
+    '</div>';
+  }
+
+  function renderDetail(){
+    const i = _issues.find(x=>x.id===_currentIssueId);
+    if(!i){
+      return '<div class="is-screen"><div class="is-empty"><div class="is-empty-txt">Issue not found.</div></div></div>';
+    }
+    const creatorId = getCreatorId();
+    const canDelete = creatorId && i.creatorId && i.creatorId === creatorId;
+
+    let sections = '';
+    sections += detailSec('Summary', i.summary);
+    sections += detailSec('Description', i.description);
+    sections += detailSec('Reason', i.reason);
+    if(i.stepsToReproduce) sections += detailSec('Steps to Reproduce', i.stepsToReproduce);
+    if(i.expectedBehavior) sections += detailSec('Expected Behavior', i.expectedBehavior);
+    if(i.actualBehavior) sections += detailSec('Actual Behavior', i.actualBehavior);
+    if(i.ownerResponse){
+      sections += '<div class="is-detail-owner">'+
+        '<div class="is-detail-lbl">Owner Response</div>'+
+        '<div class="is-detail-val">'+esc(i.ownerResponse)+'</div>'+
+      '</div>';
+    }
+
+    let actions = '';
+    if(canDelete){
+      actions = '<div class="is-detail-actions">'+
+        '<button class="is-btn danger" onclick="deleteMyIssue(\''+esc(i.id)+'\')">Delete my issue</button>'+
+      '</div>';
+    }
+
+    return '<div class="is-screen">'+
+      '<div class="is-detail">'+
+        '<div class="is-detail-title">'+esc(i.title)+'</div>'+
+        '<div class="is-detail-meta">'+
+          '<span class="is-card-cat">'+esc(catName(i.category))+'</span>'+
+          badgeHtml(i.status||'open')+
+          '<span class="is-card-date">'+esc(fmtFullDate(i.createdAt))+'</span>'+
+        '</div>'+
+        sections+
+        actions+
+      '</div>'+
+    '</div>';
+  }
+
+  function detailSec(label, val){
+    if(!val) return '';
+    return '<div class="is-detail-sec">'+
+      '<div class="is-detail-lbl">'+esc(label)+'</div>'+
+      '<div class="is-detail-val">'+esc(val)+'</div>'+
+    '</div>';
+  }
+
+  // ---- Navigation handlers (exposed globally) ----
+  window.openIssues = openIssues;
+  window.closeIssues = closeIssues;
+  window.openIssueList = function(cat){
+    _currentCategory = cat;
+    showScreen('list');
+  };
+  window.openIssueDetail = function(id){
+    _currentIssueId = id;
+    showScreen('detail');
+  };
+  window.isBack = function(){
+    if(_currentScreen === 'detail') showScreen('list');
+    else if(_currentScreen === 'list') showScreen('home');
+    else closeIssues();
+  };
+  window.deleteMyIssue = function(id){
+    if(typeof dlgConfirm === 'function'){
+      dlgConfirm('Delete issue?','This will permanently remove your issue.', async function(){
+        const card = document.querySelector('.is-detail');
+        if(card) card.style.transition = 'opacity .25s, transform .25s';
+        if(card){ card.style.opacity = '0'; card.style.transform = 'translateX(20px) scale(.95)'; }
+        await apiDelete(id);
+        isToast('Issue deleted');
+        setTimeout(()=>showScreen('list'), 220);
+      }, true);
+    }else{
+      if(!confirm('Delete this issue?')) return;
+      apiDelete(id).then(()=>{
+        isToast('Issue deleted');
+        showScreen('list');
+      });
+    }
+  };
+
+  // ---- Submit modal ----
+  window.openIssueModal = function(){
+    if(!_currentCategory){
+      isToast('Choose a category first');
+      return;
+    }
+    const ov = document.getElementById('is-modal-ov');
+    const modal = document.getElementById('is-modal');
+    if(!ov || !modal) return;
+    renderModalBody();
+    ov.classList.add('show');
+    requestAnimationFrame(()=>{ ov.classList.add('visible'); modal.classList.add('open'); });
+    setTimeout(()=>{
+      const first = document.getElementById('is-f-title');
+      if(first) first.focus();
+    }, 420);
+  };
+  window.closeIssueModal = function(instant){
+    const ov = document.getElementById('is-modal-ov');
+    const modal = document.getElementById('is-modal');
+    if(!ov || !modal) return;
+    modal.classList.remove('open');
+    ov.classList.remove('visible');
+    const delay = instant ? 0 : 350;
+    setTimeout(()=>{ ov.classList.remove('show'); }, delay);
+  };
+
+  function renderModalBody(){
+    const body = document.getElementById('is-modal-body');
+    if(!body) return;
+    const cat = _currentCategory || 'web';
+    body.innerHTML =
+      field('title','Issue Title','text','Brief headline', true) +
+      field('summary','Short Summary','text','One-line summary', true) +
+      fieldTA('description','Description','Describe the issue in detail', true) +
+      fieldTA('reason','Reason','Why this happened or your best guess', true) +
+      fieldSelect('category','Category', IS_CATEGORIES.map(c=>({value:c.key,label:c.name})), cat, true) +
+      fieldTA('steps','Steps to Reproduce','Optional — numbered steps', false) +
+      fieldTA('expected','Expected Behavior','Optional — what should have happened', false) +
+      fieldTA('actual','Actual Behavior','Optional — what actually happened', false) +
+      '<button class="is-submit" id="is-submit-btn" onclick="submitIssueForm()">Submit Issue</button>';
+  }
+
+  function field(id,label,type,ph,req){
+    return '<div class="is-field" data-field="'+id+'">'+
+      '<label class="is-lbl" for="is-f-'+id+'">'+esc(label)+(req?'<span class="is-req">*</span>':'')+'</label>'+
+      '<input id="is-f-'+id+'" class="is-input" type="'+type+'" placeholder="'+esc(ph)+'" oninput="clearFieldErr(\''+id+'\')"/>'+
+      '<div class="is-field-err">This field is required.</div>'+
+    '</div>';
+  }
+  function fieldTA(id,label,ph,req){
+    return '<div class="is-field" data-field="'+id+'">'+
+      '<label class="is-lbl" for="is-f-'+id+'">'+esc(label)+(req?'<span class="is-req">*</span>':'')+'</label>'+
+      '<textarea id="is-f-'+id+'" class="is-textarea" placeholder="'+esc(ph)+'" oninput="clearFieldErr(\''+id+'\')"></textarea>'+
+      '<div class="is-field-err">This field is required.</div>'+
+    '</div>';
+  }
+  function fieldSelect(id,label,options,val,req){
+    const opts = options.map(o=>'<option value="'+esc(o.value)+'"'+(o.value===val?' selected':'')+'>'+esc(o.label)+'</option>').join('');
+    return '<div class="is-field" data-field="'+id+'">'+
+      '<label class="is-lbl" for="is-f-'+id+'">'+esc(label)+(req?'<span class="is-req">*</span>':'')+'</label>'+
+      '<select id="is-f-'+id+'" class="is-select">'+opts+'</select>'+
+      '<div class="is-field-err">This field is required.</div>'+
+    '</div>';
+  }
+
+  window.clearFieldErr = function(id){
+    const wrap = document.querySelector('.is-field[data-field="'+id+'"]');
+    if(wrap) wrap.classList.remove('err');
+  };
+
+  function setFieldErr(id){
+    const wrap = document.querySelector('.is-field[data-field="'+id+'"]');
+    if(wrap) wrap.classList.add('err');
+  }
+
+  function getVal(id){
+    const el = document.getElementById('is-f-'+id);
+    return el ? (el.value||'').trim() : '';
+  }
+
+  window.submitIssueForm = async function(){
+    if(_submitting) return;
+    const payload = {
+      title: getVal('title'),
+      summary: getVal('summary'),
+      description: getVal('description'),
+      reason: getVal('reason'),
+      category: getVal('category'),
+      stepsToReproduce: getVal('steps'),
+      expectedBehavior: getVal('expected'),
+      actualBehavior: getVal('actual'),
+      creatorId: getCreatorId()
+    };
+    let firstErr = null;
+    ['title','summary','description','reason','category'].forEach(k=>{
+      if(!payload[k]){ setFieldErr(k); if(!firstErr) firstErr = k; }
+    });
+    if(firstErr){
+      const el = document.getElementById('is-f-'+firstErr);
+      if(el) el.focus();
+      return;
+    }
+    const dup = _issues.find(i=>i.title===payload.title && i.description===payload.description);
+    if(dup){
+      isToast('An identical issue already exists.');
+      return;
+    }
+    _submitting = true;
+    const btn = document.getElementById('is-submit-btn');
+    if(btn){
+      btn.disabled = true;
+      btn.innerHTML = '<span class="is-spin"></span>Submitting...';
+    }
+    try{
+      await apiCreate(payload);
+      isToast('Issue submitted');
+      closeIssueModal(false);
+      setTimeout(()=>{ refreshCurrentScreen(); }, 360);
+    }catch(e){
+      isToast(e && e.message ? e.message : 'Failed to submit');
+    }finally{
+      _submitting = false;
+      if(btn){
+        btn.disabled = false;
+        btn.innerHTML = 'Submit Issue';
+      }
+    }
+  };
+
+  // ---- Owner panel (replaces old Owner page) ----
+  const _origOpenOwnerPage = window.openOwnerPage;
+  window.openOwnerPage = function(){
+    const ov = document.getElementById('owner-ov');
+    if(!ov) return;
+    ov.classList.add('show');
+    requestAnimationFrame(()=>ov.classList.add('visible'));
+    _ownerFilter = 'all';
+    _ownerSearch = '';
+    const search = document.getElementById('is-owner-search');
+    if(search) search.value = '';
+    document.querySelectorAll('#is-owner-filter .is-filter-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.status === 'all');
+    });
+    renderOwnerList();
+    apiFetch().then(()=>{ renderOwnerList(); });
+    startPolling();
+  };
+  const _origCloseOwnerPage = window.closeOwnerPage;
+  window.closeOwnerPage = function(){
+    const ov = document.getElementById('owner-ov');
+    if(!ov) return;
+    ov.classList.remove('visible');
+    setTimeout(()=>{ ov.classList.remove('show'); }, 800);
+    stopPolling();
+  };
+
+  window.setOwnerFilter = function(status){
+    _ownerFilter = status;
+    document.querySelectorAll('#is-owner-filter .is-filter-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.status === status);
+    });
+    renderOwnerList();
+  };
+  window.filterOwnerIssues = function(val){
+    _ownerSearch = (val||'').toLowerCase();
+    renderOwnerList();
+  };
+
+  function renderOwnerList(){
+    const container = document.getElementById('is-owner-list');
+    if(!container) return;
+    let list = _issues.slice();
+    if(_ownerFilter !== 'all') list = list.filter(i=>(i.status||'open')===_ownerFilter);
+    if(_ownerSearch){
+      list = list.filter(i=>{
+        const hay = (i.title+' '+i.summary+' '+i.description+' '+(i.ownerResponse||'')).toLowerCase();
+        return hay.indexOf(_ownerSearch) >= 0;
+      });
+    }
+    if(!list.length){
+      container.innerHTML = '<div class="is-empty-row">No issues match.</div>';
+      return;
+    }
+    container.innerHTML = list.map(i=>{
+      return '<div class="is-owner-card" data-id="'+esc(i.id)+'">'+
+        '<div class="is-owner-card-title">'+esc(i.title)+'</div>'+
+        '<div class="is-owner-card-summary">'+esc(i.summary||'')+'</div>'+
+        '<div class="is-owner-card-meta">'+
+          '<span class="is-card-cat">'+esc(catName(i.category))+'</span>'+
+          badgeHtml(i.status||'open')+
+          '<span class="is-card-date">'+esc(fmtDate(i.createdAt))+'</span>'+
+        '</div>'+
+        '<div class="is-owner-actions">'+
+          '<select class="is-status-select" onchange="updateIssueStatus(\''+esc(i.id)+'\', this.value)">'+
+            IS_STATUSES.map(s=>'<option value="'+s+'"'+((i.status||'open')===s?' selected':'')+'>'+s.charAt(0).toUpperCase()+s.slice(1)+'</option>').join('')+
+          '</select>'+
+          '<button class="is-btn" onclick="toggleReply(\''+esc(i.id)+'\')">Reply</button>'+
+          '<button class="is-btn danger" onclick="deleteIssueOwner(\''+esc(i.id)+'\')">Delete</button>'+
+        '</div>'+
+        '<div class="is-reply-wrap" id="is-reply-'+esc(i.id)+'" style="display:none;">'+
+          '<textarea class="is-reply-textarea" id="is-reply-txt-'+esc(i.id)+'" placeholder="Type a response...">'+esc(i.ownerResponse||'')+'</textarea>'+
+          '<div class="is-reply-actions">'+
+            '<button class="is-btn" onclick="saveReply(\''+esc(i.id)+'\')">Save Reply</button>'+
+            '<button class="is-btn" onclick="toggleReply(\''+esc(i.id)+'\')">Cancel</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  window.toggleReply = function(id){
+    const wrap = document.getElementById('is-reply-'+id);
+    if(!wrap) return;
+    if(wrap.style.display === 'none'){
+      wrap.style.display = 'block';
+      const ta = document.getElementById('is-reply-txt-'+id);
+      if(ta){
+        ta.style.opacity = '0';
+        ta.style.transform = 'translateY(6px)';
+        ta.style.transition = 'opacity .25s, transform .25s';
+        requestAnimationFrame(()=>{ ta.style.opacity = '1'; ta.style.transform = 'translateY(0)'; });
+        setTimeout(()=>ta.focus(), 200);
+      }
+    }else{
+      wrap.style.display = 'none';
+    }
+  };
+
+  window.saveReply = async function(id){
+    const ta = document.getElementById('is-reply-txt-'+id);
+    const text = ta ? (ta.value||'').trim() : '';
+    if(!text){ isToast('Reply cannot be empty'); return; }
+    const card = document.querySelector('.is-owner-card[data-id="'+id+'"]');
+    if(card){ card.style.opacity = '.6'; card.style.pointerEvents = 'none'; }
+    await apiUpdate(id, { ownerResponse: text, updatedAt: Date.now() });
+    if(card){ card.style.opacity = ''; card.style.pointerEvents = ''; }
+    isToast('Reply saved');
+    renderOwnerList();
+  };
+
+  window.updateIssueStatus = async function(id, status){
+    if(!IS_STATUSES.includes(status)) return;
+    const card = document.querySelector('.is-owner-card[data-id="'+id+'"]');
+    const badge = card ? card.querySelector('.is-badge') : null;
+    if(badge){
+      badge.className = 'is-badge '+status+' changing';
+      setTimeout(()=>badge.classList.remove('changing'), 500);
+    }
+    await apiUpdate(id, { status: status, updatedAt: Date.now() });
+    isToast('Status: ' + status);
+    if(badge) badge.textContent = status;
+    if(_ownerFilter !== 'all' && _ownerFilter !== status){
+      if(card){
+        card.style.transition = 'opacity .3s, transform .3s, max-height .35s, padding .35s, margin .35s, border-width .35s';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(30px) scale(.95)';
+        setTimeout(()=>{ renderOwnerList(); }, 320);
+      }
+    }
+  };
+
+  window.deleteIssueOwner = function(id){
+    if(typeof dlgConfirm === 'function'){
+      dlgConfirm('Delete issue?','This will permanently remove the issue.', async function(){
+        const card = document.querySelector('.is-owner-card[data-id="'+id+'"]');
+        if(card) card.classList.add('removing');
+        await apiDelete(id);
+        isToast('Issue deleted');
+        setTimeout(()=>renderOwnerList(), 340);
+      }, true);
+    }
+  };
+
+  // ---- Polling for live updates (every 15s while overlay is open) ----
+  function startPolling(){
+    stopPolling();
+    _pollTimer = setInterval(function(){
+      apiFetch().then(()=>{
+        if(_currentScreen) refreshCurrentScreen();
+        const ownerOv = document.getElementById('owner-ov');
+        if(ownerOv && ownerOv.classList.contains('show')){
+          renderOwnerList();
+        }
+      });
+    }, 15000);
+  }
+  function stopPolling(){
+    if(_pollTimer){ clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  // ---- Initial cache load ----
+  _issues = cacheRead();
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stopPolling();
+    else {
+      const isOv = document.getElementById('issues-ov');
+      const ownerOv = document.getElementById('owner-ov');
+      if((isOv && isOv.classList.contains('show')) || (ownerOv && ownerOv.classList.contains('show'))){
+        startPolling();
+      }
+    }
+  });
+
+})();
+
+
 /* ── CLIENT-SIDE URL ROUTER ── */
 (function(){
   const ROUTES = {
     '/Oasis':   'oasis',
     '/ApiKeys': 'apikeys',
-    '/Owner':   'owner'
+    '/Owner':   'owner',
+    '/Issues':  'issues'
   };
-  const ROUTE_NAMES = { oasis:'Oasis', apikeys:'ApiKeys', owner:'Owner' };
+  const ROUTE_NAMES = { oasis:'Oasis', apikeys:'ApiKeys', owner:'Owner', issues:'Issues' };
   let _routerActive = false;
   let _navigating = false;
 
@@ -5620,6 +6539,18 @@ function ownerIconImg(n){
     navigateHome();
   };
 
+  const _origOpenIssues = window.openIssues;
+  window.openIssues = function(){
+    _origOpenIssues();
+    navigateTo('Issues');
+  };
+
+  const _origCloseIssues = window.closeIssues;
+  window.closeIssues = function(){
+    _origCloseIssues();
+    navigateHome();
+  };
+
   // Handle browser back/forward
   window.addEventListener('popstate', function(e){
     if(_navigating) return;
@@ -5638,6 +6569,9 @@ function ownerIconImg(n){
       if(document.getElementById('owner-pw-ov') && document.getElementById('owner-pw-ov').classList.contains('show')){
         closeOwnerPw({target:document.getElementById('owner-pw-ov')});
       }
+      if(document.getElementById('issues-ov') && document.getElementById('issues-ov').classList.contains('show')){
+        _origCloseIssues();
+      }
     } else if(page === 'Oasis'){
       if(!(document.getElementById('oasis-ov') && document.getElementById('oasis-ov').style.display === 'flex')){
         _origOpenOasis();
@@ -5649,6 +6583,10 @@ function ownerIconImg(n){
     } else if(page === 'Owner'){
       if(!(document.getElementById('owner-ov') && document.getElementById('owner-ov').classList.contains('show'))){
         _origOpenOwnerPw();
+      }
+    } else if(page === 'Issues'){
+      if(!(document.getElementById('issues-ov') && document.getElementById('issues-ov').classList.contains('show'))){
+        _origOpenIssues();
       }
     }
   });
@@ -5669,6 +6607,7 @@ function ownerIconImg(n){
             if(route === 'oasis') _origOpenOasis();
             else if(route === 'apikeys') _origOpenApiKey();
             else if(route === 'owner') _origOpenOwnerPw();
+            else if(route === 'issues') _origOpenIssues();
             // Replace state so we have proper history entry
             history.replaceState({page:path.slice(1)}, '', path);
           }, 50);
