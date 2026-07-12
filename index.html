@@ -5815,6 +5815,7 @@ function ownerIconImg(n){
   const IS_API = '/api/issues';
   const IS_CACHE_KEY = 'void_issues_cache_v1';
   const IS_CREATOR_KEY = 'void_creator_id_v1';
+  const IS_NAME_KEY = 'void_display_name_v1';
   const IS_LAST_SEEN_KEY = 'void_issues_last_seen_v1';
 
   // ---- State ----
@@ -5873,6 +5874,49 @@ function ownerIconImg(n){
       }
       return id;
     }catch(e){ return null; }
+  }
+
+  /* Anonymous display name: 3 random letters + 2 random digits, e.g. "Thh87".
+     Generated once per browser and cached in localStorage so it's stable
+     across visits. Since there's no login, true global uniqueness can't be
+     guaranteed offline, so we bias collision odds down (26^3 * 90 ≈ 1.58M
+     combinations) and, on top of that, check it against every name already
+     seen in the currently loaded issues/comments and reroll if it collides. */
+  const NAME_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+  function randomNameCandidate(){
+    let letters = '';
+    for(let n=0;n<3;n++) letters += NAME_LETTERS[Math.floor(Math.random()*NAME_LETTERS.length)];
+    letters = letters[0].toUpperCase() + letters.slice(1);
+    const digits = 10 + Math.floor(Math.random()*90); // 10-99, avoids leading-zero look
+    return letters + digits;
+  }
+  function collectKnownNames(){
+    const known = new Set();
+    for(const it of _issues){
+      if(Array.isArray(it.comments)){
+        for(const c of it.comments){
+          if(c.author === 'user' && c.name) known.add(c.name);
+        }
+      }
+    }
+    return known;
+  }
+  function getDisplayName(){
+    try{
+      let name = localStorage.getItem(IS_NAME_KEY);
+      if(name) return name;
+      const known = collectKnownNames();
+      let candidate = randomNameCandidate();
+      let tries = 0;
+      while(known.has(candidate) && tries < 25){
+        candidate = randomNameCandidate();
+        tries++;
+      }
+      localStorage.setItem(IS_NAME_KEY, candidate);
+      return candidate;
+    }catch(e){
+      return randomNameCandidate();
+    }
   }
 
   function cacheRead(){
@@ -6025,7 +6069,27 @@ function ownerIconImg(n){
       clearTimeout(id2);
       const idx = _issues.findIndex(i=>i.id===id);
       if(idx >= 0){
-        _issues[idx] = Object.assign({}, _issues[idx], patch);
+        const merged = Object.assign({}, _issues[idx], patch);
+        // addComment isn't a real field on the issue, it's an instruction.
+        // Apply it locally the same way the server does so the reply
+        // doesn't disappear if the request failed or timed out.
+        if(patch.addComment && typeof patch.addComment === 'object'){
+          delete merged.addComment;
+          const text = String(patch.addComment.text || '').trim();
+          if(text){
+            const comment = {
+              id: 'local_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8),
+              author: patch.addComment.author === 'owner' ? 'owner' : 'user',
+              name: patch.addComment.name || null,
+              text,
+              createdAt: Date.now()
+            };
+            merged.comments = (Array.isArray(_issues[idx].comments) ? _issues[idx].comments.slice() : []).concat([comment]);
+            if(comment.author === 'owner') merged.ownerResponse = comment.text;
+          }
+        }
+        merged.updatedAt = Date.now();
+        _issues[idx] = merged;
         cacheWrite(_issues);
         syncSig();
         return _issues[idx];
@@ -6208,10 +6272,10 @@ function ownerIconImg(n){
       thread += '<div class="is-thread-lbl">Replies</div>'+
         '<div class="is-thread">'+
           comments.map(c=>{
-            const who = c.author==='owner' ? 'Owner' : 'You';
+            const who = c.author==='owner' ? 'Owner' : (c.name || 'Anonymous');
             return '<div class="is-thread-msg '+(c.author==='owner'?'owner':'user')+'">'+
               '<div class="is-thread-msg-hdr">'+
-                '<span class="is-thread-msg-who">'+who+'</span>'+
+                '<span class="is-thread-msg-who">'+esc(who)+'</span>'+
                 '<span class="is-thread-msg-time">'+esc(fmtDate(c.createdAt))+'</span>'+
               '</div>'+
               '<div class="is-thread-msg-txt">'+esc(c.text)+'</div>'+
@@ -6620,7 +6684,7 @@ function ownerIconImg(n){
     if(!text){ isToast('Reply cannot be empty'); return; }
     const btn = ta ? ta.closest('.is-user-reply-wrap') : null;
     if(btn){ btn.style.opacity = '.6'; btn.style.pointerEvents = 'none'; }
-    await apiUpdate(id, { addComment: { author:'user', text: text } });
+    await apiUpdate(id, { addComment: { author:'user', name: getDisplayName(), text: text } });
     if(btn){ btn.style.opacity = ''; btn.style.pointerEvents = ''; }
     isToast('Reply sent');
     if(_currentIssueId === id) showScreen('detail');
