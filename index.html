@@ -6215,7 +6215,7 @@ function ownerIconImg(n){
   window.isBack = function(){
     if(_currentScreen === 'detail') showScreen('list');
     else if(_currentScreen === 'list') showScreen('home');
-    else closeIssues();
+    else window.closeIssues();
   };
   window.deleteMyIssue = function(id){
     if(typeof dlgConfirm === 'function'){
