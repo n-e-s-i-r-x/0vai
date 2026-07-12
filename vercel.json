@@ -3,6 +3,8 @@
     { "source": "/Oasis",   "destination": "/index.html" },
     { "source": "/ApiKeys", "destination": "/index.html" },
     { "source": "/Owner",   "destination": "/index.html" },
+    { "source": "/Issues",  "destination": "/index.html" },
+    { "source": "/Issues/(.*)",  "destination": "/index.html" },
     { "source": "/api/v1/chat/model",        "destination": "/api/v1/chat/model.js" },
     { "source": "/api/v1/models",            "destination": "/api/v1/chat/model.js" },
     { "source": "/v1/models",                "destination": "/api/v1/chat/model.js" },
@@ -14,7 +16,7 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key" }
       ]
     },
@@ -22,7 +24,7 @@
       "source": "/v1/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key" }
       ]
     }
