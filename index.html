@@ -23,7 +23,7 @@
 <meta name="twitter:title" content="0v Ai Model that update it's own data in real time."/>
 <meta name="twitter:description" content="It might be on a subdomain but don't judge it. this model can update it's own data in realtime by searching the web and learning every user's given message."/>
 <meta name="twitter:image" content="https://0vai.vercel.app/ico.webp"/>
-<!-- Favicon — all formats for full browser/OS coverage -->
+<!-- Favicon, all formats for full browser/OS coverage -->
 <link rel="icon" href="/ico.webp" type="image/webp"/>
 <link rel="shortcut icon" href="/ico.webp"/>
 <link rel="apple-touch-icon" href="/ico.webp"/>
@@ -1028,7 +1028,7 @@ body.themed .speed-timer {
     </svg>
   </button>
 
-  <!-- Top-right rank widget — no background, no border -->
+  <!-- Top-right rank widget, no background, no border -->
   <div id="oasis-toprank" style="position:absolute;top:calc(52px + env(safe-area-inset-top));right:18px;z-index:50001;display:flex;flex-direction:column;gap:3px;font-family:var(--app-font);font-size:10px;color:rgba(255,255,255,0.5);text-align:right;pointer-events:none;letter-spacing:0.3px;"></div>
 
   <canvas id="oasis-canvas" style="width:100%;height:100%;display:block;touch-action:none;"></canvas>
@@ -1832,7 +1832,7 @@ body.themed .is-reply-textarea{border-color:var(--accent-border);background:var(
 /* Sidebar Issues button (no icon) */
 .sb-fbtn.sb-issues{padding-left:16px;}
 
-/* Silent refresh — suppresses entrance animations during data-driven re-renders
+/* Silent refresh, suppresses entrance animations during data-driven re-renders
    (polling updates) so the screen doesn't flicker. Only applies when body has
    .is-refreshing class, which is added briefly during refreshCurrentScreen()
    and renderOwnerList(), then removed 60ms later. */
@@ -1851,7 +1851,7 @@ body.is-refreshing .is-fab{animation:none!important;}
 
 <script>
 /* ══════════════════════════════════════
-   OASIS — Void brain + grouped galaxies
+   OASIS, Void brain + grouped galaxies
    - Static scattered nodes (no drift)
    - Void center brain
    - Two groups (Zeros / Vees) w/ leaders
@@ -2287,7 +2287,7 @@ function renderGraph(){
   const VW=400,VH=80,padX=20,padY=6;
   const innerW=VW-padX*2;
   const graphH=VH-padY-22; // 22px reserved for labels at bottom
-  // Fixed x order — all 6 models, left to right
+  // Fixed x order, all 6 models, left to right
   const FIXED_X=['0','00','000','V','VV','VVV'];
   const n=FIXED_X.length;
   const sx=innerW/(n-1);
@@ -3836,7 +3836,7 @@ const CODE_MODE_EXTRA=`\n\nULTRA MAXIMUM CODING MODE - ACTIVE.\nYou are now the 
 
 /* ─── HUMANIZER ─── */
 // System prompt and all config live in chat.js (server-side).
-// Every user message is silently humanized — no angle brackets needed.
+// Every user message is silently humanized, no angle brackets needed.
 
 // Recognise any "ran out of tokens"-style finish reason across providers.
 function isLengthFinish(fr){
@@ -3863,9 +3863,9 @@ function looksMidSentence(t){
 async function runHumanizer(userText,aiId){
   const txtEl=document.getElementById(aiId+'txt');
   if(!txtEl)return{text:'',truncated:false};
-  // Always humanize the raw message — no angle-bracket wrapping needed
+  // Always humanize the raw message, no angle-bracket wrapping needed
   const toHumanize=userText.trim();
-  // Scale token budget to input size — long pastes need long outputs.
+  // Scale token budget to input size, long pastes need long outputs.
   // Rough estimate: ~1 token per 4 chars; ask for input length in tokens with headroom.
   const dynMax=Math.min(64000,Math.max(8000,Math.ceil(toHumanize.length/2)));
 
@@ -4101,7 +4101,7 @@ function toggleMsgCopy(row,e){
   if(!row)return;
   const btn=row.querySelector('.msg-copy-btn');
   if(!btn)return;
-  // If click came from inside the button itself, don't toggle — let copyMsgTxt handle it
+  // If click came from inside the button itself, don't toggle, let copyMsgTxt handle it
   if(e&&e.target&&e.target.closest('.msg-copy-btn'))return;
   // If click came from a code-wrap, don't toggle
   if(e&&e.target&&e.target.closest('.code-wrap'))return;
@@ -4219,7 +4219,7 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
   if(!res.ok)throw new Error('HTTP '+res.status);
   const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
   let pendingReplace=false;let replaceBuf='';
-  // Never use drip mode — it causes spam-like rapid re-renders for short responses.
+  // Never use drip mode, it causes spam-like rapid re-renders for short responses.
   // Just yield chunks as they arrive; the throttled render handles pacing.
   try{while(true){const{done,value}=await reader.read();if(done)break;
     buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop()??'';
@@ -4237,7 +4237,7 @@ async function* streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,use
         if(choice.finish_reason)yield{type:'finish',reason:choice.finish_reason};
         const reasoningDelta=choice.delta?.reasoning_content??choice.delta?.reasoning;
         const text=choice.delta?.content;
-        // Emit reasoning_content as a proper typed object — no string wrapping
+        // Emit reasoning_content as a proper typed object, no string wrapping
         if(typeof reasoningDelta==='string'&&reasoningDelta.length){
           yield{type:'_reasoning',text:reasoningDelta};
         }
@@ -4273,7 +4273,7 @@ async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkMo
   for await(const delta of streamRaw(msgs,extraCtx,modelKey,maxTok,abortSignal,contMode,useSearch)){
     // Pass through meta/finish/verify_replace objects unchanged
     if(delta&&typeof delta==='object'){
-      // Native reasoning_content chunk — route directly as think
+      // Native reasoning_content chunk, route directly as think
       if(delta.type==='_reasoning'){
         if(isThinkModel){
           hasNativeReasoning=true;
@@ -4315,7 +4315,7 @@ async function* streamParsed(msgs,extraCtx,modelKey,maxTok,abortSignal,isThinkMo
           if(!thinkSeen){
             inThink=true;thinkSeen=true;buffer=buffer.substring(idx+tag.length);
           }else{
-            // Second <think> tag — skip through to closing tag
+            // Second <think> tag, skip through to closing tag
             const rest=buffer.substring(idx+tag.length);
             const{idx:ci,tag:ct}=findFirst(rest,CLOSE_TAGS);
             buffer=ci!==-1?rest.substring(ci+ct.length):'';
@@ -4381,7 +4381,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
   const allowSmartSearch=!contMode;
   S.abort=new AbortController();
 
-  // Append-only think renderer — zero flicker during streaming
+  // Append-only think renderer, zero flicker during streaming
   const renderThink=(text)=>{
     thinkText+=text;
     if(!thCont)return;
@@ -4444,7 +4444,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
                 internalSearchFired=true;runWithSmartSearch=true;if(S.abort)S.abort.abort();break;
               }
             }
-            // Once answerPhase started, silently drop think chunks — never bleed into answer
+            // Once answerPhase started, silently drop think chunks, never bleed into answer
           }else if(chunk.type==='answer'){
             enterAnswerPhase();
             answerText+=chunk.text;renderAnswer();
@@ -4463,14 +4463,14 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         }else{break;}
       }
 
-      // If aborted (stop button), clean up and bail — do NOT save or re-render
+      // If aborted (stop button), clean up and bail, do NOT save or re-render
       if(S.abort?.signal?.aborted&&!internalSearchFired){
         document.getElementById(aiId)?.remove();
         setStopMode(false);hideUserSearchInd();S.busy=false;S.abort=null;stopSpeedTimer();return;
       }
 
       // If model only produced reasoning and no answer, extract last paragraph of think
-      // as a fallback answer but strip reasoning markers — keep think block intact
+      // as a fallback answer but strip reasoning markers, keep think block intact
       if(!answerPhase){
         finalRenderThink();
         thinkDurStr=((Date.now()-tStart)/1000).toFixed(1);
@@ -4532,7 +4532,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
         answerText+=txt;
         if(txtEl){const aw=txtEl.querySelector('.activity-wrap');if(aw)aw.remove();_renderNonThink();}
       }
-      // If aborted (stop button), clean up and bail — do NOT save or re-render
+      // If aborted (stop button), clean up and bail, do NOT save or re-render
       if(S.abort?.signal?.aborted){
         document.getElementById(aiId)?.remove();
         setStopMode(false);hideUserSearchInd();S.busy=false;S.abort=null;stopSpeedTimer();return;
@@ -4575,7 +4575,7 @@ async function generate(convo,aiId,userSearchData,userQuery,userWantsSearch,cont
       stopSpeedTimer();
       return;
     }else{
-      // Aborted by user (stop button) — clean up pending row, do NOT save or re-render
+      // Aborted by user (stop button), clean up pending row, do NOT save or re-render
       document.getElementById(aiId)?.remove();
       setStopMode(false);
       hideUserSearchInd();
@@ -5018,7 +5018,7 @@ function esc(s){return String(s??'').replace(/&/g,"&amp;").replace(/</g,"&lt;").
 const PX_DOWN_SVG='<svg width="10" height="10" viewBox="0 0 8 8" fill="currentColor" shape-rendering="crispEdges"><rect x="3" y="0" width="2" height="5"/><rect x="1" y="4" width="6" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="3" y="6" width="2" height="1"/></svg>';
 const PX_WARN_SVG='<svg width="12" height="11" viewBox="0 0 11 9" fill="currentColor" shape-rendering="crispEdges" style="vertical-align:-2px;margin-right:2px"><rect x="5" y="0" width="1" height="1"/><rect x="4" y="1" width="3" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="0" y="7" width="11" height="1"/></svg>';
 
-/* Reusable pixel-art toggle SVG — shown in renderSettings */
+/* Reusable pixel-art toggle SVG, shown in renderSettings */
 window.TOG_SVG='<svg viewBox="0 0 25 14" xmlns="http://www.w3.org/2000/svg"><g class="tog-off" fill="currentColor"><rect x="2" y="0" width="21" height="1"/><rect x="2" y="13" width="21" height="1"/><rect x="0" y="2" width="1" height="10"/><rect x="24" y="2" width="1" height="10"/><rect x="1" y="1" width="1" height="1"/><rect x="23" y="1" width="1" height="1"/><rect x="1" y="12" width="1" height="1"/><rect x="23" y="12" width="1" height="1"/><rect x="2" y="2" width="6" height="10" fill="#fff"/><rect x="2" y="2" width="1" height="1" fill="#bbb"/><rect x="7" y="2" width="1" height="1" fill="#bbb"/><rect x="2" y="11" width="1" height="1" fill="#bbb"/><rect x="7" y="11" width="1" height="1" fill="#bbb"/></g><g class="tog-on" fill="currentColor"><rect x="2" y="0" width="21" height="1"/><rect x="2" y="13" width="21" height="1"/><rect x="0" y="2" width="1" height="10"/><rect x="24" y="2" width="1" height="10"/><rect x="1" y="1" width="1" height="1"/><rect x="23" y="1" width="1" height="1"/><rect x="1" y="12" width="1" height="1"/><rect x="23" y="12" width="1" height="1"/><rect x="17" y="2" width="6" height="10" fill="#fff"/><rect x="17" y="2" width="1" height="1" fill="#bbb"/><rect x="22" y="2" width="1" height="1" fill="#bbb"/><rect x="17" y="11" width="1" height="1" fill="#bbb"/><rect x="22" y="11" width="1" height="1" fill="#bbb"/></g></svg>';
 
 /* Apply saved font on boot */
@@ -5132,7 +5132,7 @@ const CAPS = {
 function modelCaps(){return CAPS[S.model]||CAPS['0'];}
 /* Auto-detect think support from chat.js MODEL_MAP via GET.
    Patches both CAPS[key].think (button gating) AND MODELS[key].hasThink (think block rendering).
-   You only need to set hasReasoning/hasPromptedThink in chat.js MODEL_MAP — nothing else. */
+   You only need to set hasReasoning/hasPromptedThink in chat.js MODEL_MAP, nothing else. */
 (async function fetchThinkCaps(){
   try{
     const res=await fetch('/api/chat');
@@ -5772,7 +5772,7 @@ function ownerIconImg(n){
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   ISSUES SYSTEM — self-contained module
+   ISSUES SYSTEM, self-contained module
    - Persists to /api/issues (serverless) with localStorage cache + fallback
    - All animations use existing cubic-bezier easing & fade patterns
    - No icons used anywhere in this feature (text-only back/close buttons)
@@ -5798,7 +5798,7 @@ function ownerIconImg(n){
   let _loading = false;
   let _pollTimer = null;
   let _submitting = false;
-  let _lastDataSig = '';        // signature of last fetched data — prevents no-op re-renders
+  let _lastDataSig = '';        // signature of last fetched data, prevents no-op re-renders
   let _lastFetchChanged = false; // true only when apiFetch actually changed _issues
   let _pendingUserRefresh = false;  // deferred refresh flag (user was typing)
   let _pendingOwnerRefresh = false; // deferred owner refresh flag
@@ -6273,9 +6273,9 @@ function ownerIconImg(n){
       fieldTA('description','Description','Describe the issue in detail', true) +
       fieldTA('reason','Reason','Why this happened or your best guess', true) +
       fieldSelect('category','Category', IS_CATEGORIES.map(c=>({value:c.key,label:c.name})), cat, true) +
-      fieldTA('steps','Steps to Reproduce','Optional — numbered steps', false) +
-      fieldTA('expected','Expected Behavior','Optional — what should have happened', false) +
-      fieldTA('actual','Actual Behavior','Optional — what actually happened', false) +
+      fieldTA('steps','Steps to Reproduce','Optional, numbered steps', false) +
+      fieldTA('expected','Expected Behavior','Optional, what should have happened', false) +
+      fieldTA('actual','Actual Behavior','Optional, what actually happened', false) +
       '<button class="is-submit" id="is-submit-btn" onclick="submitIssueForm()">Submit Issue</button>';
   }
 
@@ -6534,7 +6534,7 @@ function ownerIconImg(n){
         if(isOv && isOv.classList.contains('show') && _currentScreen){
           const scroll = document.getElementById('is-scroll');
           if(isUserInteracting(scroll)){
-            _pendingUserRefresh = true; // defer — don't blow away typing
+            _pendingUserRefresh = true; // defer, don't blow away typing
           }else{
             refreshCurrentScreen();
             _pendingUserRefresh = false;
@@ -6545,7 +6545,7 @@ function ownerIconImg(n){
         if(ownerOv && ownerOv.classList.contains('show')){
           const ownerList = document.getElementById('is-owner-list');
           if(isUserInteracting(ownerList)){
-            _pendingOwnerRefresh = true; // defer — don't blow away reply textarea
+            _pendingOwnerRefresh = true; // defer, don't blow away reply textarea
           }else{
             renderOwnerList();
             _pendingOwnerRefresh = false;
@@ -6700,6 +6700,9 @@ function ownerIconImg(n){
       if(document.getElementById('issues-ov') && document.getElementById('issues-ov').classList.contains('show')){
         _origCloseIssues();
       }
+      if(location.pathname !== '/'){
+        history.replaceState({page:'home'}, '', '/');
+      }
     } else if(page === 'Oasis'){
       if(!(document.getElementById('oasis-ov') && document.getElementById('oasis-ov').style.display === 'flex')){
         _origOpenOasis();
@@ -6730,7 +6733,7 @@ function ownerIconImg(n){
         const app = document.getElementById('app');
         if(app && app.classList.contains('ready')){
           clearInterval(waitForApp);
-          // Minimal delay — intro is already skipped for deep links
+          // Minimal delay, intro is already skipped for deep links
           setTimeout(function(){
             if(route === 'oasis') _origOpenOasis();
             else if(route === 'apikeys') _origOpenApiKey();
