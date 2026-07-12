@@ -519,7 +519,7 @@ body.themed .sb-fbtn:not(.danger):active{opacity:1;background:var(--accent-subtl
 .sb-fbtn svg{width:18px;height:18px;flex-shrink:0;}
 
 /* ── DIALOGS ── */
-#dialog-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+#dialog-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:70000;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
 #dialog-ov.show{display:flex}
 #dialog-box{background:#141414;border:1px solid #252525;border-radius:18px;padding:22px 20px 16px;width:100%;max-width:340px;animation:dialogIn .25s cubic-bezier(.34,1.56,.64,1);transition:border-color .3s;}
 body.themed #dialog-box{border-color:var(--accent-border);}
@@ -905,6 +905,14 @@ body.themed .speed-timer {
   <div class="chat-list" id="chat-list"></div>
   <div class="sb-foot">
     <button class="sb-fbtn sb-issues" onclick="openIssues()">
+      <svg width="18" height="18" viewBox="0 0 9 6" fill="currentColor" shape-rendering="crispEdges">
+        <rect x="4" y="0" width="1" height="1"/>
+        <rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="2"/><rect x="5" y="1" width="1" height="1"/>
+        <rect x="2" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/>
+        <rect x="1" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/>
+        <rect x="0" y="4" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/>
+        <rect x="0" y="5" width="9" height="1"/>
+      </svg>
       Issues
     </button>
     <button class="sb-fbtn" onclick="openApiKey()">
@@ -1100,7 +1108,7 @@ body.themed .speed-timer {
 
 <!-- ── ISSUES OVERLAY ── -->
 <div id="issues-ov" class="is-ov">
-  <button class="is-back" onclick="closeIssues()" title="Back">‹</button>
+  <button class="is-back" onclick="isBack()" title="Back">‹</button>
   <div class="is-scroll" id="is-scroll"></div>
   <button class="is-fab" id="is-fab" onclick="openIssueModal()" title="New issue" style="display:none;">+</button>
 </div>
@@ -1823,6 +1831,22 @@ body.themed .is-reply-textarea{border-color:var(--accent-border);background:var(
 
 /* Sidebar Issues button (no icon) */
 .sb-fbtn.sb-issues{padding-left:16px;}
+
+/* Silent refresh — suppresses entrance animations during data-driven re-renders
+   (polling updates) so the screen doesn't flicker. Only applies when body has
+   .is-refreshing class, which is added briefly during refreshCurrentScreen()
+   and renderOwnerList(), then removed 60ms later. */
+body.is-refreshing .is-screen,
+body.is-refreshing .is-cat-card,
+body.is-refreshing .is-card,
+body.is-refreshing .is-detail,
+body.is-refreshing .is-detail-sec,
+body.is-refreshing .is-detail-owner,
+body.is-refreshing .is-owner-card,
+body.is-refreshing .is-empty,
+body.is-refreshing .is-empty-row,
+body.is-refreshing .is-field,
+body.is-refreshing .is-fab{animation:none!important;}
 </style>
 
 <script>
@@ -5774,6 +5798,41 @@ function ownerIconImg(n){
   let _loading = false;
   let _pollTimer = null;
   let _submitting = false;
+  let _lastDataSig = '';        // signature of last fetched data — prevents no-op re-renders
+  let _lastFetchChanged = false; // true only when apiFetch actually changed _issues
+  let _pendingUserRefresh = false;  // deferred refresh flag (user was typing)
+  let _pendingOwnerRefresh = false; // deferred owner refresh flag
+
+  // ---- Signature & interaction helpers ----
+  function computeSig(arr){
+    try{
+      return JSON.stringify((arr||_issues).map(i=>({
+        id:i.id, title:i.title, summary:i.summary,
+        status:i.status, ownerResponse:i.ownerResponse,
+        category:i.category, createdAt:i.createdAt, updatedAt:i.updatedAt
+      })));
+    }catch(e){ return ''; }
+  }
+  function syncSig(){ _lastDataSig = computeSig(_issues); }
+
+  function isUserInteracting(container){
+    if(!container) return false;
+    // Submit modal open → never touch underlying screens
+    const modalOv = document.getElementById('is-modal-ov');
+    if(modalOv && modalOv.classList.contains('show')) return true;
+    // Focused input/textarea/select inside container
+    const active = document.activeElement;
+    if(active && container.contains(active)){
+      const tag = (active.tagName||'').toLowerCase();
+      if(tag==='input'||tag==='textarea'||tag==='select') return true;
+    }
+    // Any open reply textarea in owner panel
+    const openReplies = container.querySelectorAll('.is-reply-wrap');
+    for(let i=0;i<openReplies.length;i++){
+      if(openReplies[i].style.display !== 'none') return true;
+    }
+    return false;
+  }
 
   // ---- Helpers ----
   function getCreatorId(){
@@ -5846,6 +5905,7 @@ function ownerIconImg(n){
   // ---- API ----
   async function apiFetch(){
     _loading = true;
+    _lastFetchChanged = false;
     try{
       const ctrl = new AbortController();
       const id = setTimeout(()=>ctrl.abort(), 6000);
@@ -5855,10 +5915,15 @@ function ownerIconImg(n){
       const data = await res.json();
       const arr = Array.isArray(data.issues) ? data.issues : [];
       arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-      _issues = arr;
-      cacheWrite(arr);
+      const newSig = computeSig(arr);
+      if(newSig !== _lastDataSig){
+        _issues = arr;
+        cacheWrite(arr);
+        _lastDataSig = newSig;
+        _lastFetchChanged = true;
+      }
       try{ localStorage.setItem(IS_LAST_SEEN_KEY, String(Date.now())); }catch(e){}
-      return arr;
+      return _issues;
     }catch(e){
       _issues = cacheRead();
       return _issues;
@@ -5891,6 +5956,7 @@ function ownerIconImg(n){
         else _issues.unshift(issue);
         _issues.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
         cacheWrite(_issues);
+        syncSig();
       }
       return issue;
     }catch(e){
@@ -5900,6 +5966,7 @@ function ownerIconImg(n){
       if(existing >= 0) _issues[existing] = local;
       else _issues.unshift(local);
       cacheWrite(_issues);
+      syncSig();
       return local;
     }
   }
@@ -5922,6 +5989,7 @@ function ownerIconImg(n){
         const idx = _issues.findIndex(i=>i.id===updated.id);
         if(idx >= 0) _issues[idx] = updated;
         cacheWrite(_issues);
+        syncSig();
       }
       return updated;
     }catch(e){
@@ -5930,6 +5998,7 @@ function ownerIconImg(n){
       if(idx >= 0){
         _issues[idx] = Object.assign({}, _issues[idx], patch);
         cacheWrite(_issues);
+        syncSig();
         return _issues[idx];
       }
       return null;
@@ -5951,6 +6020,7 @@ function ownerIconImg(n){
     }
     _issues = _issues.filter(i=>i.id!==id);
     cacheWrite(_issues);
+    syncSig();
   }
 
   function makeLocalIssue(payload){
@@ -5980,7 +6050,7 @@ function ownerIconImg(n){
     ov.classList.add('show');
     requestAnimationFrame(()=>ov.classList.add('visible'));
     showScreen('home');
-    apiFetch().then(()=>{ refreshCurrentScreen(); });
+    apiFetch().then(()=>{ if(_lastFetchChanged) refreshCurrentScreen(); });
     startPolling();
   }
   function closeIssues(){
@@ -5988,6 +6058,7 @@ function ownerIconImg(n){
     if(!ov) return;
     ov.classList.remove('visible');
     closeIssueModal(true);
+    _pendingUserRefresh = false;
     setTimeout(()=>{
       ov.classList.remove('show');
       _currentScreen = null;
@@ -6026,11 +6097,13 @@ function ownerIconImg(n){
     const scroll = document.getElementById('is-scroll');
     if(!scroll) return;
     if(!_currentScreen){ showScreen('home'); return; }
+    document.body.classList.add('is-refreshing');
     if(_currentScreen === 'home') scroll.innerHTML = renderHome();
     else if(_currentScreen === 'list') scroll.innerHTML = renderList();
     else if(_currentScreen === 'detail') scroll.innerHTML = renderDetail();
     const fab = document.getElementById('is-fab');
     if(fab) fab.style.display = (_currentScreen === 'list') ? 'flex' : 'none';
+    setTimeout(()=>document.body.classList.remove('is-refreshing'), 60);
   }
 
   function renderHome(){
@@ -6308,7 +6381,7 @@ function ownerIconImg(n){
       b.classList.toggle('active', b.dataset.status === 'all');
     });
     renderOwnerList();
-    apiFetch().then(()=>{ renderOwnerList(); });
+    apiFetch().then(()=>{ if(_lastFetchChanged) renderOwnerList(); });
     startPolling();
   };
   const _origCloseOwnerPage = window.closeOwnerPage;
@@ -6316,6 +6389,7 @@ function ownerIconImg(n){
     const ov = document.getElementById('owner-ov');
     if(!ov) return;
     ov.classList.remove('visible');
+    _pendingOwnerRefresh = false;
     setTimeout(()=>{ ov.classList.remove('show'); }, 800);
     stopPolling();
   };
@@ -6343,8 +6417,10 @@ function ownerIconImg(n){
         return hay.indexOf(_ownerSearch) >= 0;
       });
     }
+    document.body.classList.add('is-refreshing');
     if(!list.length){
       container.innerHTML = '<div class="is-empty-row">No issues match.</div>';
+      setTimeout(()=>document.body.classList.remove('is-refreshing'), 60);
       return;
     }
     container.innerHTML = list.map(i=>{
@@ -6372,6 +6448,7 @@ function ownerIconImg(n){
         '</div>'+
       '</div>';
     }).join('');
+    setTimeout(()=>document.body.classList.remove('is-refreshing'), 60);
   }
 
   window.toggleReply = function(id){
@@ -6442,20 +6519,71 @@ function ownerIconImg(n){
     stopPolling();
     _pollTimer = setInterval(function(){
       apiFetch().then(()=>{
-        if(_currentScreen) refreshCurrentScreen();
+        // No data change → do absolutely nothing (no DOM touch, no flicker)
+        if(!_lastFetchChanged){
+          // Even when data is unchanged, check if a deferred refresh is pending
+          // (from a previous cycle where the user was typing)
+          _tryDeferredRefresh();
+          return;
+        }
+
+        const isOv = document.getElementById('issues-ov');
         const ownerOv = document.getElementById('owner-ov');
+
+        // User-facing issues screen
+        if(isOv && isOv.classList.contains('show') && _currentScreen){
+          const scroll = document.getElementById('is-scroll');
+          if(isUserInteracting(scroll)){
+            _pendingUserRefresh = true; // defer — don't blow away typing
+          }else{
+            refreshCurrentScreen();
+            _pendingUserRefresh = false;
+          }
+        }
+
+        // Owner panel
         if(ownerOv && ownerOv.classList.contains('show')){
-          renderOwnerList();
+          const ownerList = document.getElementById('is-owner-list');
+          if(isUserInteracting(ownerList)){
+            _pendingOwnerRefresh = true; // defer — don't blow away reply textarea
+          }else{
+            renderOwnerList();
+            _pendingOwnerRefresh = false;
+          }
         }
       });
     }, 15000);
   }
+
+  // Called when data was unchanged but a previous cycle deferred a refresh.
+  // If the user is no longer interacting, apply the pending refresh now.
+  function _tryDeferredRefresh(){
+    if(!_pendingUserRefresh && !_pendingOwnerRefresh) return;
+    const isOv = document.getElementById('issues-ov');
+    const ownerOv = document.getElementById('owner-ov');
+    if(_pendingUserRefresh && isOv && isOv.classList.contains('show') && _currentScreen){
+      const scroll = document.getElementById('is-scroll');
+      if(!isUserInteracting(scroll)){
+        _pendingUserRefresh = false;
+        refreshCurrentScreen();
+      }
+    }
+    if(_pendingOwnerRefresh && ownerOv && ownerOv.classList.contains('show')){
+      const ownerList = document.getElementById('is-owner-list');
+      if(!isUserInteracting(ownerList)){
+        _pendingOwnerRefresh = false;
+        renderOwnerList();
+      }
+    }
+  }
+
   function stopPolling(){
     if(_pollTimer){ clearInterval(_pollTimer); _pollTimer = null; }
   }
 
   // ---- Initial cache load ----
   _issues = cacheRead();
+  syncSig(); // initialize signature so first poll only re-renders if server differs
 
   document.addEventListener('visibilitychange', function(){
     if(document.hidden) stopPolling();
