@@ -125,10 +125,12 @@ function sanitizeComment(input){
   const author = input.author === 'owner' ? 'owner' : 'user';
   const text = String(input.text || '').trim().slice(0, 4000);
   const name = author === 'user' && input.name ? String(input.name).trim().slice(0, 16) : null;
+  const creatorId = author === 'user' && input.creatorId ? String(input.creatorId).slice(0, 64) : null;
   return {
     id: genCommentId(),
     author,
     name,
+    creatorId,
     text,
     createdAt: Date.now()
   };
@@ -157,6 +159,15 @@ function patchIssue(existing, patch){
       // Keep legacy ownerResponse in sync so older clients still see the latest owner reply.
       if(comment.author === 'owner') out.ownerResponse = comment.text;
     }
+  }
+  // removeComment: '<commentId>'
+  if(patch.removeComment){
+    const cid = String(patch.removeComment);
+    out.comments = out.comments.filter(c => c.id !== cid);
+    // If the removed comment was the most recent owner reply, keep legacy
+    // ownerResponse pointed at whatever the newest remaining owner reply is.
+    const remainingOwner = out.comments.filter(c => c.author === 'owner');
+    out.ownerResponse = remainingOwner.length ? remainingOwner[remainingOwner.length - 1].text : '';
   }
   out.updatedAt = Date.now();
   return out;
