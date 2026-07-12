@@ -1,0 +1,202 @@
+export const config = { runtime: 'edge' };
+
+/* ═══════════════════════════════════════════════════════════════════
+   /api/issues — Issue tracking endpoint
+   Methods:
+     GET    /api/issues            → list all issues
+     POST   /api/issues            → create new issue
+     PUT    /api/issues?id=<id>    → update issue (status, ownerResponse, ...)
+     DELETE /api/issues?id=<id>    → delete issue
+
+   Storage strategy (auto-detected):
+   1. UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN  (Upstash native)
+   2. KV_REST_API_URL + KV_REST_API_TOKEN                (Vercel KV / Upstash Vercel integration legacy names)
+   3. In-memory Map fallback (per edge instance — NOT cross-user safe).
+
+   When you install the Upstash Vercel integration
+   (https://vercel.com/integrations/upstash) BOTH naming conventions are
+   injected automatically as env vars on your project — no code changes
+   required. See SETUP_UPSTASH.md for the step-by-step Vercel walkthrough.
+   ═══════════════════════════════════════════════════════════════════ */
+
+function env(name){
+  return (typeof process !== 'undefined' ? process.env?.[name] : undefined)
+      ?? (typeof globalThis !== 'undefined' ? globalThis[name] : undefined);
+}
+
+const KV_URL   = env('UPSTASH_REDIS_REST_URL')   ?? env('KV_REST_API_URL');
+const KV_TOKEN = env('UPSTASH_REDIS_REST_TOKEN') ?? env('KV_REST_API_TOKEN');
+const USE_KV = !!(KV_URL && KV_TOKEN);
+
+const KV_KEY = 'issues:all:v1';
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
+  // Helps you verify in DevTools which backend is actually in use.
+  'X-Issues-Storage': USE_KV ? 'upstash-redis' : 'memory-fallback'
+};
+
+const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: CORS });
+
+/* In-memory fallback store (per edge instance) */
+const MEM = new Map();
+
+async function loadAll(){
+  if(USE_KV){
+    try{
+      const r = await fetch(`${KV_URL}/GET/${encodeURIComponent(KV_KEY)}`, {
+        headers: KV_TOKEN ? { 'Authorization': `Bearer ${KV_TOKEN}` } : {}
+      });
+      if(r.ok){
+        const data = await r.json();
+        // Upstash returns { result: <string|null> }
+        if(data && typeof data.result === 'string'){
+          const arr = JSON.parse(data.result);
+          return Array.isArray(arr) ? arr : [];
+        }
+        // Some KV REST variants return { value: ... } — handle both
+        if(data && typeof data.value === 'string'){
+          const arr = JSON.parse(data.value);
+          return Array.isArray(arr) ? arr : [];
+        }
+        return [];
+      }
+      return [];
+    }catch(_){ return []; }
+  }
+  return Array.from(MEM.values());
+}
+
+async function saveAll(arr){
+  if(USE_KV){
+    try{
+      const r = await fetch(`${KV_URL}/SET/${encodeURIComponent(KV_KEY)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(KV_TOKEN ? { 'Authorization': `Bearer ${KV_TOKEN}` } : {})
+        },
+        body: JSON.stringify(arr)
+      });
+      return r.ok;
+    }catch(_){ return false; }
+  }
+  MEM.clear();
+  for(const it of arr) MEM.set(it.id, it);
+  return true;
+}
+
+function genId(){
+  return 'is_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function sanitizeIssue(input){
+  const title = String(input.title || '').trim().slice(0, 200);
+  const summary = String(input.summary || '').trim().slice(0, 500);
+  const description = String(input.description || '').trim().slice(0, 8000);
+  const reason = String(input.reason || '').trim().slice(0, 4000);
+  const category = (['web','model'].includes(input.category) ? input.category : 'web');
+  const stepsToReproduce = String(input.stepsToReproduce || '').trim().slice(0, 4000);
+  const expectedBehavior = String(input.expectedBehavior || '').trim().slice(0, 2000);
+  const actualBehavior = String(input.actualBehavior || '').trim().slice(0, 2000);
+  const creatorId = input.creatorId ? String(input.creatorId).slice(0, 64) : null;
+  return {
+    id: genId(),
+    title, summary, description, reason, category,
+    stepsToReproduce, expectedBehavior, actualBehavior,
+    status: 'open',
+    ownerResponse: '',
+    creatorId,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+function patchIssue(existing, patch){
+  const allowed = ['status','ownerResponse','title','summary','description','reason','category','stepsToReproduce','expectedBehavior','actualBehavior'];
+  const out = Object.assign({}, existing);
+  for(const k of allowed){
+    if(patch[k] !== undefined){
+      if(k === 'status'){
+        const v = String(patch[k]);
+        if(['open','fixed','closed'].includes(v)) out.status = v;
+      } else {
+        out[k] = String(patch[k]).slice(0, 8000);
+      }
+    }
+  }
+  out.updatedAt = Date.now();
+  return out;
+}
+
+export default async function handler(req){
+  if(req.method === 'OPTIONS'){
+    return new Response(null, { status: 200, headers: CORS });
+  }
+
+  const url = new URL(req.url);
+  const idParam = url.searchParams.get('id');
+
+  // ── GET: list all ──
+  if(req.method === 'GET'){
+    const arr = await loadAll();
+    arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    return json({ issues: arr });
+  }
+
+  // ── POST: create ──
+  if(req.method === 'POST'){
+    let body;
+    try{ body = await req.json(); }catch(_){ return json({ error: 'Invalid body' }, 400); }
+    if(!body || typeof body !== 'object') return json({ error: 'Invalid body' }, 400);
+
+    const title = String(body.title || '').trim();
+    const description = String(body.description || '').trim();
+    if(!title) return json({ error: 'Title is required' }, 400);
+    if(!description) return json({ error: 'Description is required' }, 400);
+
+    // Duplicate check
+    const arr = await loadAll();
+    const dup = arr.find(i => i.title === title && i.description === description);
+    if(dup) return json({ error: 'An identical issue already exists' }, 409);
+
+    const issue = sanitizeIssue(body);
+    arr.push(issue);
+    await saveAll(arr);
+    return json({ issue }, 201);
+  }
+
+  // ── PUT: update ──
+  if(req.method === 'PUT'){
+    let body;
+    try{ body = await req.json(); }catch(_){ return json({ error: 'Invalid body' }, 400); }
+    const id = body?.id || idParam;
+    const patch = body?.patch || {};
+    if(!id) return json({ error: 'Issue id required' }, 400);
+
+    const arr = await loadAll();
+    const idx = arr.findIndex(i => i.id === id);
+    if(idx < 0) return json({ error: 'Issue not found' }, 404);
+    const updated = patchIssue(arr[idx], patch);
+    arr[idx] = updated;
+    await saveAll(arr);
+    return json({ issue: updated });
+  }
+
+  // ── DELETE ──
+  if(req.method === 'DELETE'){
+    const id = idParam;
+    if(!id) return json({ error: 'Issue id required' }, 400);
+    const arr = await loadAll();
+    const next = arr.filter(i => i.id !== id);
+    if(next.length === arr.length) return json({ error: 'Issue not found' }, 404);
+    await saveAll(next);
+    return json({ ok: true });
+  }
+
+  return json({ error: 'Method not allowed' }, 405);
+}
