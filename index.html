@@ -1797,6 +1797,8 @@ body.themed .is-detail-owner .is-detail-lbl{color:var(--accent);}
 .is-thread-msg-who{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;}
 .is-thread-msg-time{font-size:10.5px;color:rgba(255,255,255,.35);margin-left:auto;}
 .is-thread-msg-txt{font-size:13.5px;color:#ddd;line-height:1.55;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;}
+.is-thread-msg-del{background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;padding:2px;display:flex;align-items:center;justify-content:center;transition:color .15s;}
+.is-thread-msg-del:hover{color:#f87171;}
 .is-thread-msg.owner{background:rgba(74,222,128,.04);border:1px solid rgba(74,222,128,.15);}
 .is-thread-msg.owner .is-thread-msg-who{color:#4ade80;}
 body.themed .is-thread-msg.owner{border-color:var(--accent-border);background:var(--accent-subtle);}
@@ -6266,6 +6268,7 @@ function ownerIconImg(n){
       comments = [{ id:'legacy', author:'owner', text:i.ownerResponse, createdAt:i.updatedAt||i.createdAt }];
     }
     const ownerHasReplied = comments.some(c=>c.author==='owner');
+    const isOwnerMode = !!(document.getElementById('owner-ov') && document.getElementById('owner-ov').classList.contains('show'));
 
     let thread = '';
     if(comments.length){
@@ -6273,10 +6276,18 @@ function ownerIconImg(n){
         '<div class="is-thread">'+
           comments.map(c=>{
             const who = c.author==='owner' ? 'Owner' : (c.name || 'Anonymous');
+            const isMine = c.author==='user' && creatorId && c.creatorId && c.creatorId === creatorId;
+            const canDeleteComment = isOwnerMode || isMine;
+            const delBtn = (canDeleteComment && c.id !== 'legacy')
+              ? '<button class="is-thread-msg-del" onclick="deleteComment(\''+esc(i.id)+'\',\''+esc(c.id)+'\')" title="Delete">'+
+                  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'+
+                '</button>'
+              : '';
             return '<div class="is-thread-msg '+(c.author==='owner'?'owner':'user')+'">'+
               '<div class="is-thread-msg-hdr">'+
                 '<span class="is-thread-msg-who">'+esc(who)+'</span>'+
                 '<span class="is-thread-msg-time">'+esc(fmtDate(c.createdAt))+'</span>'+
+                delBtn+
               '</div>'+
               '<div class="is-thread-msg-txt">'+esc(c.text)+'</div>'+
             '</div>';
@@ -6363,6 +6374,21 @@ function ownerIconImg(n){
         isToast('Issue deleted');
         showScreen('list');
       });
+    }
+  };
+
+  window.deleteComment = function(issueId, commentId){
+    const doDelete = async function(){
+      await apiUpdate(issueId, { removeComment: commentId });
+      isToast('Reply deleted');
+      if(_currentIssueId === issueId) showScreen('detail');
+      if(typeof renderOwnerList === 'function' && document.getElementById('is-owner-list')) renderOwnerList();
+    };
+    if(typeof dlgConfirm === 'function'){
+      dlgConfirm('Delete reply?','This will permanently remove this reply.', doDelete, true);
+    }else{
+      if(!confirm('Delete this reply?')) return;
+      doDelete();
     }
   };
 
@@ -6684,7 +6710,7 @@ function ownerIconImg(n){
     if(!text){ isToast('Reply cannot be empty'); return; }
     const btn = ta ? ta.closest('.is-user-reply-wrap') : null;
     if(btn){ btn.style.opacity = '.6'; btn.style.pointerEvents = 'none'; }
-    await apiUpdate(id, { addComment: { author:'user', name: getDisplayName(), text: text } });
+    await apiUpdate(id, { addComment: { author:'user', name: getDisplayName(), creatorId: getCreatorId(), text: text } });
     if(btn){ btn.style.opacity = ''; btn.style.pointerEvents = ''; }
     isToast('Reply sent');
     if(_currentIssueId === id) showScreen('detail');
