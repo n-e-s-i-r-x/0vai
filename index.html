@@ -1786,6 +1786,26 @@ body.themed .is-detail-owner{border-color:var(--accent-border);background:var(--
 .is-detail-owner .is-detail-lbl{color:#4ade80;}
 body.themed .is-detail-owner .is-detail-lbl{color:var(--accent);}
 .is-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+
+/* ── Comment thread ── */
+.is-thread-lbl{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.4);margin:6px 2px 2px;}
+.is-thread{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:2px;scroll-behavior:smooth;}
+.is-thread::-webkit-scrollbar{width:6px;}
+.is-thread::-webkit-scrollbar-thumb{background:#222;border-radius:3px;}
+.is-thread-msg{border-radius:12px;padding:12px 14px;animation:isCardIn .3s cubic-bezier(.4,0,.2,1) both;}
+.is-thread-msg-hdr{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.is-thread-msg-who{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;}
+.is-thread-msg-time{font-size:10.5px;color:rgba(255,255,255,.35);margin-left:auto;}
+.is-thread-msg-txt{font-size:13.5px;color:#ddd;line-height:1.55;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;}
+.is-thread-msg.owner{background:rgba(74,222,128,.04);border:1px solid rgba(74,222,128,.15);}
+.is-thread-msg.owner .is-thread-msg-who{color:#4ade80;}
+body.themed .is-thread-msg.owner{border-color:var(--accent-border);background:var(--accent-subtle);}
+body.themed .is-thread-msg.owner .is-thread-msg-who{color:var(--accent);}
+.is-thread-msg.user{background:#111;border:1px solid #1f1f1f;}
+.is-thread-msg.user .is-thread-msg-who{color:rgba(255,255,255,.55);}
+.is-reply-toggle-btn{display:flex;align-items:center;gap:6px;}
+.is-user-reply-wrap{margin-top:4px;}
+.is-user-reply-actions{display:flex;gap:6px;margin-top:6px;}
 .is-btn{padding:10px 16px;background:#141414;border:1px solid #222;border-radius:10px;color:#ddd;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,transform .1s,border-color .15s;font-family:var(--app-font);}
 .is-btn:active{transform:scale(.96);}
 .is-btn:disabled{opacity:.4;pointer-events:none;}
@@ -6174,17 +6194,52 @@ function ownerIconImg(n){
     if(i.stepsToReproduce) sections += detailSec('Steps to Reproduce', i.stepsToReproduce);
     if(i.expectedBehavior) sections += detailSec('Expected Behavior', i.expectedBehavior);
     if(i.actualBehavior) sections += detailSec('Actual Behavior', i.actualBehavior);
-    if(i.ownerResponse){
-      sections += '<div class="is-detail-owner">'+
-        '<div class="is-detail-lbl">Owner Response</div>'+
-        '<div class="is-detail-val">'+esc(i.ownerResponse)+'</div>'+
-      '</div>';
+
+    // Build thread: prefer the comments array; fall back to legacy ownerResponse
+    // for older issues that predate threaded replies.
+    let comments = Array.isArray(i.comments) ? i.comments.slice() : [];
+    if(!comments.length && i.ownerResponse){
+      comments = [{ id:'legacy', author:'owner', text:i.ownerResponse, createdAt:i.updatedAt||i.createdAt }];
+    }
+    const ownerHasReplied = comments.some(c=>c.author==='owner');
+
+    let thread = '';
+    if(comments.length){
+      thread += '<div class="is-thread-lbl">Replies</div>'+
+        '<div class="is-thread">'+
+          comments.map(c=>{
+            const who = c.author==='owner' ? 'Owner' : 'You';
+            return '<div class="is-thread-msg '+(c.author==='owner'?'owner':'user')+'">'+
+              '<div class="is-thread-msg-hdr">'+
+                '<span class="is-thread-msg-who">'+who+'</span>'+
+                '<span class="is-thread-msg-time">'+esc(fmtDate(c.createdAt))+'</span>'+
+              '</div>'+
+              '<div class="is-thread-msg-txt">'+esc(c.text)+'</div>'+
+            '</div>';
+          }).join('')+
+        '</div>';
     }
 
-    let actions = '';
+    let actions = '<div class="is-detail-actions">';
+    if(ownerHasReplied){
+      actions += '<button class="is-btn is-reply-toggle-btn" onclick="toggleUserReply(\''+esc(i.id)+'\')">'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-5-5 5-5"/><path d="M4 12h11a5 5 0 0 1 5 5v1"/></svg>'+
+        'Reply'+
+      '</button>';
+    }
     if(canDelete){
-      actions = '<div class="is-detail-actions">'+
-        '<button class="is-btn danger" onclick="deleteMyIssue(\''+esc(i.id)+'\')">Delete my issue</button>'+
+      actions += '<button class="is-btn danger" onclick="deleteMyIssue(\''+esc(i.id)+'\')">Delete my issue</button>';
+    }
+    actions += '</div>';
+
+    let replyComposer = '';
+    if(ownerHasReplied){
+      replyComposer = '<div class="is-user-reply-wrap" id="is-user-reply-'+esc(i.id)+'" style="display:none;">'+
+        '<textarea class="is-reply-textarea" id="is-user-reply-txt-'+esc(i.id)+'" placeholder="Write a reply..."></textarea>'+
+        '<div class="is-user-reply-actions">'+
+          '<button class="is-btn" onclick="submitUserReply(\''+esc(i.id)+'\')">Send</button>'+
+          '<button class="is-btn" onclick="toggleUserReply(\''+esc(i.id)+'\')">Cancel</button>'+
+        '</div>'+
       '</div>';
     }
 
@@ -6197,7 +6252,9 @@ function ownerIconImg(n){
           '<span class="is-card-date">'+esc(fmtFullDate(i.createdAt))+'</span>'+
         '</div>'+
         sections+
+        thread+
         actions+
+        replyComposer+
       '</div>'+
     '</div>';
   }
@@ -6492,7 +6549,7 @@ function ownerIconImg(n){
     if(!text){ isToast('Reply cannot be empty'); return; }
     const card = document.querySelector('.is-owner-card[data-id="'+id+'"]');
     if(card){ card.style.opacity = '.6'; card.style.pointerEvents = 'none'; }
-    await apiUpdate(id, { ownerResponse: text, updatedAt: Date.now() });
+    await apiUpdate(id, { addComment: { author:'owner', text: text } });
     if(card){ card.style.opacity = ''; card.style.pointerEvents = ''; }
     isToast('Reply saved');
     renderOwnerList();
@@ -6537,6 +6594,36 @@ function ownerIconImg(n){
       btn.disabled = false;
       btn.innerHTML = originalHtml;
     }
+  };
+
+  window.toggleUserReply = function(id){
+    const wrap = document.getElementById('is-user-reply-'+id);
+    if(!wrap) return;
+    if(wrap.style.display === 'none'){
+      wrap.style.display = 'block';
+      const ta = document.getElementById('is-user-reply-txt-'+id);
+      if(ta){
+        ta.style.opacity = '0';
+        ta.style.transform = 'translateY(6px)';
+        ta.style.transition = 'opacity .25s, transform .25s';
+        requestAnimationFrame(()=>{ ta.style.opacity = '1'; ta.style.transform = 'translateY(0)'; });
+        setTimeout(()=>ta.focus(), 200);
+      }
+    }else{
+      wrap.style.display = 'none';
+    }
+  };
+
+  window.submitUserReply = async function(id){
+    const ta = document.getElementById('is-user-reply-txt-'+id);
+    const text = ta ? (ta.value||'').trim() : '';
+    if(!text){ isToast('Reply cannot be empty'); return; }
+    const btn = ta ? ta.closest('.is-user-reply-wrap') : null;
+    if(btn){ btn.style.opacity = '.6'; btn.style.pointerEvents = 'none'; }
+    await apiUpdate(id, { addComment: { author:'user', text: text } });
+    if(btn){ btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+    isToast('Reply sent');
+    if(_currentIssueId === id) showScreen('detail');
   };
 
   window.updateIssueStatus = async function(id, status){
