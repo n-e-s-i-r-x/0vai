@@ -10,7 +10,7 @@ export const config = { runtime: 'edge' };
    the standard '00' chat mode uses, same OPENROUTER_API_KEY as chat.js.
    ═══════════════════════════════════════════════════════════════════ */
 
-const REPLY_MODEL = 'liquid/lfm-2.5-1.2b-instruct:free';
+const REPLY_MODEL = 'openrouter/free';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
