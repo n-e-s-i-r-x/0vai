@@ -124,9 +124,11 @@ function genCommentId(){
 function sanitizeComment(input){
   const author = input.author === 'owner' ? 'owner' : 'user';
   const text = String(input.text || '').trim().slice(0, 4000);
+  const name = author === 'user' && input.name ? String(input.name).trim().slice(0, 16) : null;
   return {
     id: genCommentId(),
     author,
+    name,
     text,
     createdAt: Date.now()
   };
