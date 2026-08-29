@@ -36,7 +36,7 @@ POWERED: Void`;
 
 const PUBLIC_MODEL   = 'Void V1 Flash';
 const UPSTREAM_URL   = 'https://opencode.ai/zen/v1/chat/completions';
-const UPSTREAM_MODEL = 'deepseek-v4-flash-free';
+const UPSTREAM_MODEL = 'hy3-frew';
 const ROTATE_STATUS  = new Set([401, 403, 429, 500, 502, 503]);
 
 const CORS = {
