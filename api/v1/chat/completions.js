@@ -115,7 +115,10 @@ export default async function handler(request) {
         const choice = data?.choices?.[0]; if (!choice) return;
         const delta = choice.delta || {};
         if (typeof delta.content === 'string') { const text = filter.push(delta.content); if (text) write(sse(chunk(id, created, { content: text }))); }
-        for (const key of ['tool_calls', 'function_call', 'reasoning_content']) if (delta[key] !== undefined) write(sse(chunk(id, created, { [key]: delta[key] })));
+        for (const key of ['tool_calls', 'function_call']) if (delta[key] !== undefined) write(sse(chunk(id, created, { [key]: delta[key] })));
+        if (delta.reasoning_content !== undefined || delta.reasoning !== undefined) {
+          write(sse(chunk(id, created, { reasoning_content: delta.reasoning_content ?? delta.reasoning })));
+        }
         if (choice.finish_reason) write(sse(chunk(id, created, {}, choice.finish_reason)));
       };
       try {

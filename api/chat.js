@@ -50,7 +50,8 @@ async function upstreamStream({ request, messages, model, temperature, maxTokens
         const raw = trimmed.slice(5).trim(); if (raw === '[DONE]') continue;
         try {
           const delta = JSON.parse(raw)?.choices?.[0]?.delta || {};
-          if (typeof delta.reasoning_content === 'string' && reasoning) send(content(`<think>${delta.reasoning_content}</think>`));
+          if (typeof delta.reasoning_content === 'string' && reasoning) send(sse({ choices: [{ delta: { reasoning_content: delta.reasoning_content }, finish_reason: null }] }));
+          if (typeof delta.reasoning === 'string' && reasoning) send(sse({ choices: [{ delta: { reasoning_content: delta.reasoning }, finish_reason: null }] }));
           if (typeof delta.content === 'string') send(content(delta.content));
         } catch {}
       }
