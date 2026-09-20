@@ -1,307 +1,137 @@
 export const config = { runtime: 'edge' };
 
-// ─────────────────────────────────────────────────────────────────────
-// Void V1 Flash — API Proxy
-// Identity is set via system prompt. Everything else is passed through
-// untouched so API clients can inject system prompts and tool definitions.
-// ─────────────────────────────────────────────────────────────────────
-
-const UPSTREAM_URL = 'https://api.kilo.ai/api/gateway/chat/completions';
-const UPSTREAM_MODEL = 'cohere/north-mini-code:free';
+const UPSTREAM = 'https://api.kilo.ai/api/gateway/chat/completions';
+const MODEL = 'cohere/north-mini-code:free';
 const PUBLIC_MODEL = 'Void V1 Flash';
-
-// Identity injected as the very first system message.
-// Clean and minimal — no restrictions, no persona rules.
-const VOID_SYSTEM = `YOUR IDENTITY: Void V1 Flash
-CREATOR: 0vai
-POWERED: Void`;
-
-
+const IDENTITY = 'You are Void V1 Flash, created by 0vai and powered by Void.';
 const CORS = {
-  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key',
 };
 
-function jsonRes(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
-  });
-}
+const json = (value, status = 200) => new Response(JSON.stringify(value), {
+  status, headers: { ...CORS, 'Content-Type': 'application/json' },
+});
+const error = (message, code, status = 400) => json({ error: { message, type: status >= 500 ? 'server_error' : 'invalid_request_error', code } }, status);
+const now = () => Math.floor(Date.now() / 1000);
+const completionId = id => typeof id === 'string' && id ? id.replace(/[^a-zA-Z0-9_.-]/g, '') : `chatcmpl-${Date.now()}`;
 
-function sanitizeId(id) {
-  if (!id) return `chatcmpl-${Date.now()}`;
-  const strip = ['deepseek','gpt','claude','llama','gemini','google','bard','mistral','qwen','cohere','falcon'];
-  let out = id;
-  for (const s of strip) out = out.replace(new RegExp(s, 'gi'), '');
-  return out || `chatcmpl-${Date.now()}`;
-}
-
-// Strip <think>/<thinking> blocks (any case) and DeepSeek DSML markup.
-// Used on completed (non-streaming) content only.
-function stripThinkBlocks(text) {
-  if (!text) return text;
-  return text
-    .replace(/<think(?:ing)?[\s\S]*?<\/think(?:ing)?>/gi, '')
-    .replace(/<think(?:ing)?[^>]*\/>/gi, '')
-    .replace(/\u601d\u8003[\s\S]*?\u601d\u8003/g, '')
-    .replace(/<\|\|DSML\|\|[\s\S]*?<\/\|\|DSML\|\|[^>]*>/g, '')
-    .replace(/<\|\|DSML\|\|[^>]*\/>/g, '')
-    .replace(/ {2,}/g, ' ')
+function removePrivateThought(text) {
+  return String(text || '')
+    .replace(/<think(?:ing)?(?:\s[^>]*)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+    .replace(/<think(?:ing)?\s*\/?>/gi, '')
+    .replace(/<\|\|DSML\|\|[\s\S]*?<\/\|\|DSML\|\|>/gi, '')
     .trim();
 }
 
-// Streaming think-tag stripper.
-// Handles partial tags split across chunk boundaries.
-class ThinkStripper {
-  constructor() {
-    this.buf    = '';
-    this.inside = false;
-  }
-
-  feed(chunk) {
-    this.buf += chunk;
-    let out = '';
-
-    while (this.buf.length > 0) {
+class ThoughtFilter {
+  constructor() { this.pending = ''; this.inside = false; }
+  push(value) {
+    this.pending += value;
+    let output = '';
+    while (this.pending) {
       if (this.inside) {
-        // Waiting for closing tag
-        const closeIdx = this.buf.toLowerCase().indexOf('</think');
-        if (closeIdx === -1) {
-          // Hold last 8 chars — enough for partial '</thinkin'
-          if (this.buf.length > 8) this.buf = this.buf.slice(-8);
-          break;
-        }
-        const gt = this.buf.indexOf('>', closeIdx);
-        if (gt === -1) { this.buf = this.buf.slice(closeIdx); break; }
+        const end = this.pending.search(/<\/think(?:ing)?>/i);
+        if (end < 0) { this.pending = this.pending.slice(-12); break; }
+        const close = this.pending.match(/<\/think(?:ing)?>/i)[0];
+        this.pending = this.pending.slice(end + close.length);
         this.inside = false;
-        this.buf = this.buf.slice(gt + 1);
       } else {
-        // Looking for opening tag
-        const openIdx = this.buf.toLowerCase().indexOf('<think');
-        if (openIdx === -1) {
-          // Safe to emit all except last 6 chars ('<think' is 6 chars)
-          const safe = Math.max(0, this.buf.length - 6);
-          out += this.buf.slice(0, safe);
-          this.buf = this.buf.slice(safe);
+        const match = this.pending.match(/<think(?:ing)?(?:\s[^>]*)?>/i);
+        if (!match) {
+          const safe = Math.max(0, this.pending.length - 12);
+          output += this.pending.slice(0, safe);
+          this.pending = this.pending.slice(safe);
           break;
         }
-        out += this.buf.slice(0, openIdx);
-        const rest = this.buf.slice(openIdx);
-        const gt   = rest.indexOf('>');
-        if (gt === -1) { this.buf = rest; break; }  // incomplete tag
+        output += this.pending.slice(0, match.index);
+        this.pending = this.pending.slice(match.index + match[0].length);
         this.inside = true;
-        this.buf = rest.slice(gt + 1);
       }
     }
-
-    return out;
+    return output;
   }
-
-  // Call once after the stream ends to flush any held content.
-  flush() {
-    const out   = this.inside ? '' : this.buf;
-    this.buf    = '';
-    this.inside = false;
-    return out;
-  }
+  finish() { const result = this.inside ? '' : this.pending; this.pending = ''; this.inside = false; return result; }
 }
 
-const SSE = {
-  enc:  (obj) => `data: ${JSON.stringify(obj)}\n\n`,
-  done: ()    => 'data: [DONE]\n\n',
-};
+function sse(payload) { return `data: ${JSON.stringify(payload)}\n\n`; }
+function chunk(id, created, delta, finish_reason = null) {
+  return { id, object: 'chat.completion.chunk', created, model: PUBLIC_MODEL, choices: [{ index: 0, delta, finish_reason }] };
+}
 
-// ── Main handler ──────────────────────────────────────────────────────
-export default async function handler(req) {
-  if (req.method === 'OPTIONS')
-    return new Response(null, { status: 204, headers: CORS });
+export default async function handler(request) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  if (request.method !== 'POST') return error('Only POST is supported.', 'method_not_allowed', 405);
 
-  if (req.method !== 'POST')
-    return jsonRes({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
+  let input;
+  try { input = await request.json(); } catch { return error('Request body must be valid JSON.', 'invalid_json'); }
+  if (!Array.isArray(input.messages) || input.messages.length === 0) return error('messages must be a non-empty array.', 'invalid_messages');
 
-  let body;
-  try { body = await req.json(); }
-  catch {
-    return jsonRes({ error: { message: 'Invalid JSON in request body', type: 'invalid_request_error', code: 'invalid_json' } }, 400);
-  }
-
-  const {
-    messages        = [],
-    stream          = false,
-    temperature     = 0.7,
-    max_tokens      = 2048,
-    reasoning_effort,
-    think,
-    tools,
-    tool_choice,
-    response_format,
-  } = body;
-
-  const resolvedEffort = reasoning_effort ?? (think ? 'low' : 'medium');
-  const hasReasoning   = resolvedEffort !== false && resolvedEffort !== 0 && resolvedEffort !== 'none';
-
-  // Our identity goes first, then everything from the caller unchanged.
-  // This is the key fix: compatible API clients send
-  // their own system messages with tool definitions — we must NOT strip them.
-  const upstreamMessages = [
-    { role: 'system', content: VOID_SYSTEM },
-    ...messages,
-  ];
-
+  const stream = input.stream === true;
+  const effort = input.reasoning_effort ?? (input.think ? 'medium' : 'none');
+  const normalizedEffort = { default: 'medium', low: 'low', medium: 'medium', high: 'high', extrahigh: 'high', max: 'high' }[String(effort).toLowerCase()];
   const upstreamBody = {
-    model:      UPSTREAM_MODEL,
-    messages:   upstreamMessages,
-    temperature,
-    max_tokens: Math.max(2048, max_tokens),
+    model: MODEL,
+    messages: [{ role: 'system', content: IDENTITY }, ...input.messages],
     stream,
+    temperature: typeof input.temperature === 'number' ? input.temperature : 0.7,
+    max_tokens: Math.max(1, Number(input.max_tokens ?? input.max_completion_tokens ?? 2048) || 2048),
   };
-
-  // Forward tool definitions so the model can generate proper tool_call responses.
-  // Without this, the model tries to express tool usage in <Thinking> blocks
-  // which stalls the response (the bug you were seeing).
-  if (tools)           upstreamBody.tools           = tools;
-  if (tool_choice)     upstreamBody.tool_choice     = tool_choice;
-  if (response_format) upstreamBody.response_format = response_format;
-
-  if (hasReasoning) {
-    const MAP    = { none:'none', low:'low', default:'medium', medium:'medium', high:'high', extrahigh:'high', max:'max' };
-    const effort = MAP[String(resolvedEffort).toLowerCase()] ?? 'medium';
-    upstreamBody.reasoning        = { effort };
-    upstreamBody.reasoning_effort = effort;
+  for (const key of ['tools', 'tool_choice', 'response_format', 'stop', 'top_p', 'frequency_penalty', 'presence_penalty']) {
+    if (input[key] !== undefined) upstreamBody[key] = input[key];
   }
+  if (normalizedEffort) upstreamBody.reasoning = { effort: normalizedEffort };
 
   let upstream;
   try {
-    upstream = await fetch(UPSTREAM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(upstreamBody),
-    });
-  } catch {
-    upstream = null;
+    upstream = await fetch(UPSTREAM, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(upstreamBody), signal: request.signal });
+  } catch (e) {
+    if (request.signal?.aborted) return error('Request cancelled.', 'cancelled', 499);
+    return error('The model is temporarily unavailable.', 'upstream_unavailable', 503);
   }
+  if (!upstream.ok) return error('The model is temporarily unavailable.', 'upstream_error', upstream.status >= 500 ? 503 : upstream.status);
 
-  if (!upstream?.ok)
-    return jsonRes({
-      error: { message: 'The model is temporarily unavailable. Please try again in a moment.', type: 'server_error', code: 'service_unavailable' },
-    }, 503);
-
-  // ── Non-streaming ──────────────────────────────────────────────────
   if (!stream) {
-    const data   = await upstream.json();
-    const choice = data?.choices?.[0];
-    const msg    = choice?.message ?? {};
-
-    const content = stripThinkBlocks(msg.content ?? '');
-    const outMsg  = { role: 'assistant', content };
-
-    // Pass through tool calls for compatible API clients
-    if (msg.tool_calls) outMsg.tool_calls = msg.tool_calls;
-    // Pass through reasoning
-    if (hasReasoning && msg.reasoning_content) outMsg.reasoning_content = msg.reasoning_content;
-
-    return new Response(JSON.stringify({
-      id:      sanitizeId(data?.id),
-      object:  'chat.completion',
-      created: data?.created || Math.floor(Date.now() / 1000),
-      model:   PUBLIC_MODEL,
-      choices: [{ index: 0, message: outMsg, finish_reason: choice?.finish_reason || 'stop' }],
-      usage:   data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
+    let data; try { data = await upstream.json(); } catch { return error('The model returned invalid JSON.', 'invalid_upstream_response', 502); }
+    const choice = data?.choices?.[0] || {};
+    const message = choice.message || {};
+    const output = { role: 'assistant', content: removePrivateThought(message.content) };
+    for (const key of ['tool_calls', 'function_call', 'audio']) if (message[key] !== undefined) output[key] = message[key];
+    return json({ id: completionId(data.id), object: 'chat.completion', created: data.created || now(), model: PUBLIC_MODEL,
+      choices: [{ index: 0, message: output, finish_reason: choice.finish_reason || 'stop' }],
+      usage: data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
   }
 
-  // ── Streaming ──────────────────────────────────────────────────────
-  const enc = new TextEncoder();
-  const dec = new TextDecoder();
-
+  const encoder = new TextEncoder();
   const readable = new ReadableStream({
-    async start(ctrl) {
-      const reader   = upstream.body.getReader();
-      let   buffer   = '';
-      let   id       = `chatcmpl-${Date.now()}`;
-      let   created  = Math.floor(Date.now() / 1000);
-      let   doneSent = false;
-      const stripper = new ThinkStripper();
-
-      const emit  = (obj)      => ctrl.enqueue(enc.encode(SSE.enc(obj)));
-      const chunk = (delta, fr) => ({
-        id,
-        object:  'chat.completion.chunk',
-        created,
-        model:   PUBLIC_MODEL,
-        choices: [{ index: 0, delta, finish_reason: fr ?? null }],
-      });
-
+    async start(controller) {
+      const write = value => { try { controller.enqueue(encoder.encode(value)); } catch {} };
+      const id = `chatcmpl-${Date.now()}`; const created = now(); const filter = new ThoughtFilter();
+      let buffer = ''; let finished = false; const decoder = new TextDecoder();
+      const handle = raw => {
+        if (raw === '[DONE]') { finished = true; return; }
+        let data; try { data = JSON.parse(raw); } catch { return; }
+        const choice = data?.choices?.[0]; if (!choice) return;
+        const delta = choice.delta || {};
+        if (typeof delta.content === 'string') { const text = filter.push(delta.content); if (text) write(sse(chunk(id, created, { content: text }))); }
+        for (const key of ['tool_calls', 'function_call', 'reasoning_content']) if (delta[key] !== undefined) write(sse(chunk(id, created, { [key]: delta[key] })));
+        if (choice.finish_reason) write(sse(chunk(id, created, {}, choice.finish_reason)));
+      };
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += dec.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const t = line.trim();
-            if (!t || t.startsWith(':') || !t.startsWith('data:')) continue;
-
-            const raw = t.slice(5).trim();
-            if (raw === '[DONE]') {
-              ctrl.enqueue(enc.encode(SSE.done()));
-              doneSent = true;
-              continue;
-            }
-
-            let p;
-            try { p = JSON.parse(raw); } catch { continue; }
-
-            if (p.id)      { const s = sanitizeId(p.id); if (s) id = s; }
-            if (p.created) created = p.created;
-
-            const choice = p?.choices?.[0];
-            if (!choice) continue;
-            const delta = choice.delta || {};
-
-            // Reasoning — pass through directly
-            if (hasReasoning) {
-              if (delta.reasoning_content) emit(chunk({ reasoning_content: delta.reasoning_content }, null));
-              if (delta.thinking)          emit(chunk({ reasoning_content: delta.thinking },          null));
-            }
-
-            // Content — strip think/thinking tags live
-            if (delta.content != null) {
-              const c = stripper.feed(delta.content);
-              if (c) emit(chunk({ content: c }, null));
-            }
-
-            // Tool calls — pass through for compatible API clients
-            if (delta.tool_calls) emit(chunk({ tool_calls: delta.tool_calls }, null));
-
-            // Finish reason
-            if (choice.finish_reason) emit(chunk({}, choice.finish_reason));
-          }
+        const reader = upstream.body?.getReader();
+        while (reader) {
+          const { done, value } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\n/); buffer = lines.pop() || '';
+          for (const line of lines) { const value = line.trim(); if (value.startsWith('data:')) handle(value.slice(5).trim()); }
         }
-
-        // Flush any content held back by the think stripper
-        const rem = stripper.flush();
-        if (rem) emit(chunk({ content: rem }, null));
-
-      } catch { /* stream read error — close cleanly */ } finally {
-        if (!doneSent) ctrl.enqueue(enc.encode(SSE.done()));
-        try { ctrl.close(); } catch { /* ignore */ }
-      }
+        if (buffer.trim().startsWith('data:')) handle(buffer.trim().slice(5).trim());
+        const tail = filter.finish(); if (tail) write(sse(chunk(id, created, { content: tail })));
+      } catch { if (!request.signal?.aborted) write(sse(chunk(id, created, { content: '\n[Stream interrupted.]' }))); }
+      if (!finished) write('data: [DONE]\n\n');
+      try { controller.close(); } catch {}
     },
   });
-
-  return new Response(readable, {
-    status:  200,
-    headers: {
-      'Content-Type':  'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection':    'keep-alive',
-      ...CORS,
-    },
-  });
+  return new Response(readable, { status: 200, headers: { ...CORS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' } });
 }
