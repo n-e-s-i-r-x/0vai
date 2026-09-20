@@ -6,11 +6,11 @@ export const config = { runtime: 'edge' };
 
    Not streamed. Not saved to storage — the client saves the returned
    text via the existing /api/issues PUT (ownerResponse) flow.
-   Uses OpenRouter directly (poolside/laguna-xs.2:free), same model
-   the standard '00' chat mode uses, same OPENROUTER_API_KEY as chat.js.
+   Uses the anonymous Kilo AI Gateway free pool.
    ═══════════════════════════════════════════════════════════════════ */
 
-const REPLY_MODEL = 'openrouter/free';
+const REPLY_MODEL = 'nex-agi/nex-n2.5-mini:free';
+const KILO_GATEWAY_URL = 'https://api.kilo.ai/api/gateway/chat/completions';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -87,10 +87,6 @@ export default async function handler(req){
     return json({ error: 'Issue data required' }, 400);
   }
 
-  const apiKey = (typeof process !== 'undefined' ? process.env?.OPENROUTER_API_KEY : undefined)
-              ?? (typeof globalThis !== 'undefined' ? globalThis.OPENROUTER_API_KEY : undefined);
-  if(!apiKey) return json({ error: 'Missing API key.' }, 500);
-
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: buildUserPrompt(issue, status) }
@@ -100,13 +96,10 @@ export default async function handler(req){
   const timeout = setTimeout(() => ctrl.abort(), 25000);
 
   try{
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(KILO_GATEWAY_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://0vai.vercel.app',
-        'X-Title': '0vAI'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: REPLY_MODEL,

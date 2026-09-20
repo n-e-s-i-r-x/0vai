@@ -1,7 +1,7 @@
 export const config = { runtime: 'edge' };
 
 /* ═══════════════════════════════════════════════════════════════════
-   chat.js  - OpenRouter edge handler
+   chat.js  - Kilo AI Gateway edge handler
    Refactored: prompts grouped, dead code removed, streaming hardened,
    abort forwarded, vision routed, universal zip-tool addendum injected.
    ═══════════════════════════════════════════════════════════════════ */
@@ -9,15 +9,16 @@ export const config = { runtime: 'edge' };
 /* ─────────────── 1. MODEL CATALOG ─────────────── */
 
 const MODEL_MAP = {
-  '0':         { id: 'hy3-free',         hasReasoning:false, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  '00':        { id: 'openrouter/free',  hasReasoning:true,  hasPromptedThink:false, minTokens:10000 },
-  '000':       { id: 'hy3-free',           hasReasoning:true,  hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  'V':         { id: 'hy3-free',        hasReasoning:true, hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  'VV':        { id: 'hy3-free', hasReasoning:true,  hasPromptedThink:false, minTokens:10000, contextWindow:100000, useOpenCode:true },
-  'VVV':       { id: 'hy3-free',      hasReasoning:true,  hasPromptedThink:false, minTokens:10000, useOpenCode:true },
-  'humanizer': { id: 'openai/gpt-oss-120b:free',  hasReasoning:false, hasPromptedThink:false, minTokens:10000, temperature:1.5 },
+  '0':         { id: 'liquid/lfm-2.5-2.6b:free', hasReasoning:false, hasPromptedThink:false, minTokens:4096 },
+  '00':        { id: 'kilo-auto/free', hasReasoning:true, hasPromptedThink:false, minTokens:8192 },
+  '000':       { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', hasReasoning:true, hasPromptedThink:false, minTokens:10000 },
+  'V':         { id: 'inclusionai/ling-3.0-flash-vl:free', hasReasoning:true, hasPromptedThink:false, minTokens:8192, contextWindow:256000 },
+  'VV':        { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', hasReasoning:true, hasPromptedThink:false, minTokens:8192, contextWindow:256000 },
+  'VVV':       { id: 'nex-agi/nex-n2.5-pro:free', hasReasoning:true, hasPromptedThink:false, minTokens:10000 },
+  'humanizer': { id: 'openai/gpt-oss-120b:free', hasReasoning:false, hasPromptedThink:false, minTokens:10000, temperature:1.5 },
 };
-const VISION_MODEL_ID = 'meta-llama/llama-3.2-11b-vision-instruct';
+const VISION_MODEL_ID = 'inclusionai/ling-3.0-flash-vl:free';
+const KILO_GATEWAY_URL = 'https://api.kilo.ai/api/gateway/chat/completions';
 const modelEntry = (key) => MODEL_MAP[key] ?? MODEL_MAP['0'];
 
 /* ─────────────── 2. PROMPTS (all together, verbatim) ─────────────── */
@@ -474,15 +475,12 @@ function heuristicSearchDecision(text, modeFlags) {
   return 'skip';
 }
 
-async function classifierSaysSearch(text, apiKey) {
+async function classifierSaysSearch(text) {
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(KILO_GATEWAY_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://0vai.vercel.app',
-        'X-Title': '0vAI',
       },
       body: JSON.stringify({
         model: 'z-ai/glm-4.5-air:free',
@@ -501,14 +499,14 @@ async function classifierSaysSearch(text, apiKey) {
   } catch (_) { return false; }
 }
 
-async function decideWebSearch(mode, text, modeFlags, apiKey) {
+async function decideWebSearch(mode, text, modeFlags) {
   // mode: 'auto' | 'on' | 'off'
   if (mode === 'on') return true;
   if (mode === 'off') return false;
   const h = heuristicSearchDecision(text, modeFlags);
   if (h === 'needs') return true;
   if (h === 'skip') return false;
-  return await classifierSaysSearch(text, apiKey);
+  return await classifierSaysSearch(text);
 }
 
 /* ─── Inlined search providers (avoids self-HTTP call which fails on Edge) ── */
@@ -787,7 +785,7 @@ const sseDone = 'data: [DONE]\n\n';
 function genericError(status) {
   if (status === 401 || status === 403) return 'Authentication failed. Check your API key.';
   if (status === 429) return 'Rate limited. The service is busy  - please wait a moment and try again.';
-  if (status === 402) return 'Out of credits. Please add funds to your OpenRouter account.';
+  if (status === 402) return 'The free model pool is temporarily unavailable. Please try again later.';
   if (status >= 500) return 'Upstream service unavailable. Please try again in a moment.';
   return 'Request failed. Please try again.';
 }
@@ -897,16 +895,16 @@ function makePromptedThinkFilter() {
 
 /* ─────────────── 5b. VV AGENT (agentic streaming builder) ─────────────── */
 
-const BUILDER_MODEL = 'inclusionai/ring-2.6-1t';
+const BUILDER_MODEL = 'poolside/laguna-s-2.1:free';
 
 function sseMeta(obj) {
   return `data: ${JSON.stringify({ meta: obj })}\n\n`;
 }
 
-const BUILDER_FALLBACK = 'poolside/laguna-xs.2:free';
+const BUILDER_FALLBACK = 'poolside/laguna-s-2.1:free';
 
 /* Reads SSE stream from upstream, sends content chunks + agent meta events live. */
-async function streamModel(messages, send, signal, apiKey, effort = 'low') {
+async function streamModel(messages, send, signal, effort = 'low') {
   let lastError = '';
   for (const modelId of [BUILDER_MODEL, BUILDER_FALLBACK]) {
     const body = {
@@ -920,14 +918,9 @@ async function streamModel(messages, send, signal, apiKey, effort = 'low') {
     send(sseMeta({ agent: { type:'log', level:'info', line:`Calling ${modelId}` } }));
     let res;
     try {
-      res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      res = await fetch(KILO_GATEWAY_URL, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://0vai.vercel.app',
-          'X-Title': '0vAI',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal,
       });
@@ -1056,7 +1049,7 @@ function extractFiles(text) {
   return { files };
 }
 
-async function buildProject({ persona, history, workspace, send, signal, apiKey, effort = 'low' }) {
+async function buildProject({ persona, history, workspace, send, signal, effort = 'low' }) {
   const stepEmit = (id, status, title) => send(sseMeta({ agent: { type:'step_update', id, status, title } }));
   const logEmit = (level, line) => send(sseMeta({ agent: { type:'log', level, line } }));
 
@@ -1085,7 +1078,7 @@ async function buildProject({ persona, history, workspace, send, signal, apiKey,
   stepEmit('step_3', 'running', 'Thinking through implementation...');
 
   logEmit('info', 'Generating code...');
-  const result = await streamModel(messages, send, signal, apiKey, effort);
+  const result = await streamModel(messages, send, signal, effort);
 
   if (!result.ok) {
     stepEmit('step_3', 'error', result.error);
@@ -1179,29 +1172,7 @@ export default async function handler(req) {
   const EFFORT_MAP_EARLY = { default:'medium', low:'low', medium:'medium', high:'high', rapid:'low', max:'high' };
   const resolvedEffortEarly = EFFORT_MAP_EARLY[reasoningEffort] || 'medium';
 
-  const apiKey = (typeof process !== 'undefined' ? process.env?.OPENROUTER_API_KEY : undefined)
-              ?? (typeof globalThis !== 'undefined' ? globalThis.OPENROUTER_API_KEY : undefined);
-  if (!apiKey) return sseError('Missing API key.');
-
-  const OPENCODE_KEYS = [
-    'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
-    'sk-Kp21c95wzZS5ocyQwmq0ITxdgYB5OATJ5FI7V1fYNCk3y5PluH1zv9EmDyXv9wCm',
-    'sk-nitMD6TV0O9C4pNWCCfWVbY8Bx0pc2en95FmAXQ8ra9HHnfzdXZQpWzVZtVj6RLk',
-    'sk-dNoFYbd44tSkdKXO2Ti7suPbdwvGbp1wibP97x4G6oP8JpU1mbSEjWgHcLQ7B87p',
-    'sk-TfhQc966OFJj5myCAGIa9vzVizWmCGDUsA3rWEJXbEV8AxALvs1sbCinWRwTGwM6',
-    'sk-RGmm7MZ2ooXy8usYF6jz2rVNhpdEEQA4DKchksDQCB35EofEpOd6KGl7lnTwETel',
-    'sk-cJQ6Np5mnjahzvXTIswoz5injEBhx6rRKotk4Nlr4haELWpWh15KTBtULT2DFhJy',
-    'sk-7So4xL8vdgeiGLHVDbSzalyaoglNIMDB6iR75wzitZW6dunptyaYj6fRpwoZ8a3w',
-    'sk-PtftPt3wJHldnFgDG0hMSTguJN4KXFBxjewvEG51ivACIow3sD3dIx4hWcCony6N',
-    'sk-3YPPMLHREJXlfV1UcwtU8kVnrqZEruRESjg0JLbuZhutMmKnOuTxCwL0BzRlpYCF',
-  ];
-  let _ocKeyIndex = Math.floor(Math.random() * OPENCODE_KEYS.length);
-  function getOpenCodeKey() {
-    const k = OPENCODE_KEYS[_ocKeyIndex % OPENCODE_KEYS.length];
-    _ocKeyIndex = (_ocKeyIndex + 1) % OPENCODE_KEYS.length;
-    return k;
-  }
-  const openCodeKey = getOpenCodeKey();
+  // Kilo's free pool supports anonymous requests; no API key is required.
 
   const mEntry = modelEntry(modelKey);
 
@@ -1233,7 +1204,7 @@ export default async function handler(req) {
             send(sseMeta({ agent: { type:'log', level:'info', line:'Starting agent session...' } }));
             send(sseMeta({ agent: { type:'plan', steps:['Initializing task','Analyzing request','Planning architecture','Thinking through implementation','Extracting files','Creating files','Validating output','Finalizing build'], ids:['step_0','step_1','step_2','step_3','step_4','step_5','step_6','step_7'] } }));
             send(sseMeta({ agent: { type:'step_update', id:'step_0', status:'running', title:'Initializing task...' } }));
-            const result = await buildProject({ persona: PERSONA_CORE['VV'] + CAPABILITIES_BLOCK, history: trimmedHist, workspace: ws, send, signal: req.signal, apiKey, effort: resolvedEffortEarly });
+            const result = await buildProject({ persona: PERSONA_CORE['VV'] + CAPABILITIES_BLOCK, history: trimmedHist, workspace: ws, send, signal: req.signal, effort: resolvedEffortEarly });
             send(sseMeta({ agent: { type:'log', level:'info', line:`Output: ${(result.text||'').length} chars, ${Object.keys(result.files||{}).length} files` } }));
             send(sseMeta({ agent: { type:'done', summary: result.text ? result.text.slice(0,200) : '', files: result.files, entry: '' } }));
             if (result.text) send(sseContent(result.text));
@@ -1318,7 +1289,7 @@ export default async function handler(req) {
     humanizer: modelKey === 'humanizer',
     vision: hasImages,
   };
-  const useWebSearch = await decideWebSearch(webSearchMode, lastUserMsg, modeFlags, apiKey);
+  const useWebSearch = await decideWebSearch(webSearchMode, lastUserMsg, modeFlags);
 
   // Pre-fetch fallback search context BEFORE upstream so the model has snippets
   // even on providers that ignore the :online suffix.
@@ -1353,7 +1324,7 @@ export default async function handler(req) {
 
   // Web search is handled exclusively by the host's /api/search.js backend
   // (results are pre-injected into the system persona above). Do NOT use
-  // OpenRouter's :online suffix or web plugin.
+  // Web search is handled by the local search backend.
   const modelId = baseModelId;
 
   const encoder = new TextEncoder();
@@ -1383,7 +1354,7 @@ export default async function handler(req) {
         }
       }
       if (hasReasoning && !hasImages) {
-        // OpenRouter: `reasoning` accepts EITHER `effort` OR `max_tokens`  -
+        // Kilo accepts a reasoning effort value without a provider key.
         // sending both causes a 400 on several providers. Use effort only.
         reqBody.reasoning = { effort: resolvedEffort };
       }
@@ -1397,42 +1368,21 @@ export default async function handler(req) {
         send(`data: {"meta":{"sources":${JSON.stringify(initSources)}}}\n\n`);
       }
 
-      const useOC = !!effectiveEntry.useOpenCode;
-      const OC_ROTATE_ON = new Set([401, 403, 429, 500, 502, 503]);
       let upstreamRes;
-      let _lastStatus = 503;
-      const _keysToTry = useOC ? OPENCODE_KEYS.length : 1;
-      for (let _attempt = 0; _attempt < _keysToTry; _attempt++) {
-        const _ocKey = useOC ? getOpenCodeKey() : null;
-        const upstreamUrl = useOC
-          ? 'https://opencode.ai/zen/v1/chat/completions'
-          : 'https://openrouter.ai/api/v1/chat/completions';
-        const upstreamHeaders = useOC
-          ? { 'Authorization': `Bearer ${_ocKey}`, 'Content-Type': 'application/json' }
-          : { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://0vai.vercel.app', 'X-Title': '0vAI' };
-        try {
-          upstreamRes = await fetchWithRetry(
-            upstreamUrl,
-            {
-              method: 'POST',
-              headers: upstreamHeaders,
-              body: JSON.stringify(reqBody),
-              signal: req.signal,
-            },
-            4
-          );
-        } catch (err) {
-          if (!useOC || _attempt === _keysToTry - 1) {
-            send(sseContent(req.signal?.aborted ? '\n[Stopped]' : 'Network error. Please try again.'));
-            send(sseDone); try { controller.close(); } catch (_) {} return;
-          }
-          _lastStatus = 503;
-          continue;
-        }
-        if (upstreamRes.ok) break;
-        _lastStatus = upstreamRes.status;
-        if (!useOC || !OC_ROTATE_ON.has(_lastStatus)) break;
-        try { await upstreamRes.text(); } catch (_) {} // drain body before retry
+      try {
+        upstreamRes = await fetchWithRetry(
+          KILO_GATEWAY_URL,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reqBody),
+            signal: req.signal,
+          },
+          4
+        );
+      } catch (err) {
+        send(sseContent(req.signal?.aborted ? '\n[Stopped]' : 'Network error. Please try again.'));
+        send(sseDone); try { controller.close(); } catch (_) {} return;
       }
 
       if (!upstreamRes.ok) {
