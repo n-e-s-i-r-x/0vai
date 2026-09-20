@@ -1,7 +1,7 @@
 export const config = { runtime: 'edge' };
 
 const UPSTREAM = 'https://api.kilo.ai/api/gateway/chat/completions';
-const MODEL = 'cohere/north-mini-code:free';
+const MODEL = 'kilo-auto/free';
 const PUBLIC_MODEL = 'Void V1 Flash';
 const IDENTITY = 'You are Void V1 Flash, created by 0vai and powered by Void.';
 const CORS = {
