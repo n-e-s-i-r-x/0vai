@@ -3,30 +3,12 @@ export const config = { runtime: 'edge' };
 // ─────────────────────────────────────────────────────────────────────
 // Void V1 Flash — API Proxy
 // Identity is set via system prompt. Everything else is passed through
-// untouched so external tools (OpenCode, Codex, Claude Code) can inject
-// their own system prompts and tool definitions and have them reach the
-// model.
+// untouched so API clients can inject system prompts and tool definitions.
 // ─────────────────────────────────────────────────────────────────────
 
-const OPENCODE_API_KEYS = [
-  'sk-s1drxz7SI85JoRGVHzYeyLwY0iTuwSwDT7r4hpeyN5iDos0hlhaMhSZIYKC5tk8b',
-  'sk-Kp21c95wzZS5ocyQwmq0ITxdgYB5OATJ5FI7V1fYNCk3y5PluH1zv9EmDyXv9wCm',
-  'sk-nitMD6TV0O9C4pNWCCfWVbY8Bx0pc2en95FmAXQ8ra9HHnfzdXZQpWzVZtVj6RLk',
-  'sk-dNoFYbd44tSkdKXO2Ti7suPbdwvGbp1wibP97x4G6oP8JpU1mbSEjWgHcLQ7B87p',
-  'sk-TfhQc966OFJj5myCAGIa9vzVizWmCGDUsA3rWEJXbEV8AxALvs1sbCinWRwTGwM6',
-  'sk-RGmm7MZ2ooXy8usYF6jz2rVNhpdEEQA4DKchksDQCB35EofEpOd6KGl7lnTwETel',
-  'sk-cJQ6Np5mnjahzvXTIswoz5injEBhx6rRKotk4Nlr4haELWpWh15KTBtULT2DFhJy',
-  'sk-7So4xL8vdgeiGLHVDbSzalyaoglNIMDB6iR75wzitZW6dunptyaYj6fRpwoZ8a3w',
-  'sk-PtftPt3wJHldnFgDG0hMSTguJN4KXFBxjewvEG51ivACIow3sD3dIx4hWcCony6N',
-  'sk-3YPPMLHREJXlfV1UcwtU8kVnrqZEruRESjg0JLbuZhutMmKnOuTxCwL0BzRlpYCF',
-];
-
-let _keyIndex = 0;
-function getNextKey() {
-  const key = OPENCODE_API_KEYS[_keyIndex % OPENCODE_API_KEYS.length];
-  _keyIndex = (_keyIndex + 1) % OPENCODE_API_KEYS.length;
-  return key;
-}
+const UPSTREAM_URL = 'https://api.kilo.ai/api/gateway/chat/completions';
+const UPSTREAM_MODEL = 'cohere/north-mini-code:free';
+const PUBLIC_MODEL = 'Void V1 Flash';
 
 // Identity injected as the very first system message.
 // Clean and minimal — no restrictions, no persona rules.
@@ -34,15 +16,11 @@ const VOID_SYSTEM = `YOUR IDENTITY: Void V1 Flash
 CREATOR: 0vai
 POWERED: Void`;
 
-const PUBLIC_MODEL   = 'Void V1 Flash';
-const UPSTREAM_URL   = 'https://opencode.ai/zen/v1/chat/completions';
-const UPSTREAM_MODEL = 'ling-3.0-flash-fin-free';
-const ROTATE_STATUS  = new Set([401, 403, 429, 500, 502, 503]);
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, api-key, x-api-key, X-Api-Key, Api-Key',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function jsonRes(body, status = 200) {
@@ -52,23 +30,9 @@ function jsonRes(body, status = 200) {
   });
 }
 
-function validateKey(req) {
-  const raw = req.headers.get('Authorization') ||
-              req.headers.get('api-key')        ||
-              req.headers.get('x-api-key')      ||
-              req.headers.get('X-Api-Key')      ||
-              req.headers.get('Api-Key')        || '';
-  const token = raw.startsWith('Bearer ') ? raw.slice(7).trim() : raw.trim();
-  if (!token) return { ok: false, reason: 'missing_key' };
-  if (/^void_sk_[a-zA-Z0-9]{10,}$/.test(token)) return { ok: true };
-  if (/^void[_-][a-zA-Z0-9]{8,}$/.test(token))  return { ok: true };
-  return { ok: false, reason: 'invalid_key' };
-}
-
 function sanitizeId(id) {
   if (!id) return `chatcmpl-${Date.now()}`;
-  const strip = ['deepseek','gpt','claude','llama','opencode','openrouter',
-                 'gemini','google','bard','mistral','qwen','cohere','falcon'];
+  const strip = ['deepseek','gpt','claude','llama','gemini','google','bard','mistral','qwen','cohere','falcon'];
   let out = id;
   for (const s of strip) out = out.replace(new RegExp(s, 'gi'), '');
   return out || `chatcmpl-${Date.now()}`;
@@ -157,14 +121,6 @@ export default async function handler(req) {
   if (req.method !== 'POST')
     return jsonRes({ error: { message: 'Method not allowed', type: 'api_error', code: 'method_not_allowed' } }, 405);
 
-  const keyCheck = validateKey(req);
-  if (!keyCheck.ok) {
-    const msg = keyCheck.reason === 'missing_key'
-      ? 'No API key provided. Generate one at https://0vai.vercel.app/ApiKeys and pass it as Authorization: Bearer <key>.'
-      : 'Invalid API key. Your key must start with void_sk_. Generate one at https://0vai.vercel.app/ApiKeys.';
-    return jsonRes({ error: { message: msg, type: 'invalid_request_error', code: 'invalid_api_key' } }, 401);
-  }
-
   let body;
   try { body = await req.json(); }
   catch {
@@ -187,7 +143,7 @@ export default async function handler(req) {
   const hasReasoning   = resolvedEffort !== false && resolvedEffort !== 0 && resolvedEffort !== 'none';
 
   // Our identity goes first, then everything from the caller unchanged.
-  // This is the key fix: external tools (OpenCode, Codex, Claude Code) send
+  // This is the key fix: compatible API clients send
   // their own system messages with tool definitions — we must NOT strip them.
   const upstreamMessages = [
     { role: 'system', content: VOID_SYSTEM },
@@ -216,19 +172,15 @@ export default async function handler(req) {
     upstreamBody.reasoning_effort = effort;
   }
 
-  // Key rotation with retry on transient errors
   let upstream;
-  for (let i = 0; i < OPENCODE_API_KEYS.length; i++) {
-    const key = getNextKey();
-    try {
-      upstream = await fetch(UPSTREAM_URL, {
-        method:  'POST',
-        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(upstreamBody),
-      });
-      if (upstream.ok) break;
-      if (!ROTATE_STATUS.has(upstream.status)) break;
-    } catch { /* network error — try next key */ }
+  try {
+    upstream = await fetch(UPSTREAM_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(upstreamBody),
+    });
+  } catch {
+    upstream = null;
   }
 
   if (!upstream?.ok)
@@ -245,7 +197,7 @@ export default async function handler(req) {
     const content = stripThinkBlocks(msg.content ?? '');
     const outMsg  = { role: 'assistant', content };
 
-    // Pass through tool calls — OpenCode / Codex / Claude Code need these
+    // Pass through tool calls for compatible API clients
     if (msg.tool_calls) outMsg.tool_calls = msg.tool_calls;
     // Pass through reasoning
     if (hasReasoning && msg.reasoning_content) outMsg.reasoning_content = msg.reasoning_content;
@@ -324,7 +276,7 @@ export default async function handler(req) {
               if (c) emit(chunk({ content: c }, null));
             }
 
-            // Tool calls — pass through for OpenCode / Codex / Claude Code
+            // Tool calls — pass through for compatible API clients
             if (delta.tool_calls) emit(chunk({ tool_calls: delta.tool_calls }, null));
 
             // Finish reason
